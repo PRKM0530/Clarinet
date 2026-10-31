@@ -3,9 +3,12 @@
 # install.sh — one-shot installer for Ubuntu 24.04 (Python 3.12)
 #
 # Run as root (or with sudo):
-#   sudo bash install.sh
+#   sudo bash deploy/install.sh
 # ─────────────────────────────────────────────────────────────────
 set -e
+
+# Always run from the repo root, wherever the script is called from
+cd "$(dirname "$0")/.."
 
 APP_DIR="/opt/clarinet"
 APP_USER="clarinet"
@@ -52,7 +55,7 @@ bash "$APP_DIR/clarinet/static/download_assets.sh"
 
 # ── 6. systemd service ───────────────────────────────────────────
 echo "▶ Installing systemd service…"
-cp "$APP_DIR/clarinet.service" /etc/systemd/system/clarinet.service
+cp "$APP_DIR/deploy/clarinet.service" /etc/systemd/system/clarinet.service
 systemctl daemon-reload
 systemctl enable clarinet
 systemctl start clarinet
@@ -67,7 +70,7 @@ EOF
 
 # ── 8. Caddy ─────────────────────────────────────────────────────
 echo "▶ Copying Caddyfile…"
-cp "$APP_DIR/Caddyfile" /etc/caddy/Caddyfile
+cp "$APP_DIR/deploy/Caddyfile" /etc/caddy/Caddyfile
 systemctl restart caddy
 
 echo ""

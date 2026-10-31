@@ -32,7 +32,7 @@
 ## Quick Start (Windows / Dev)
 
 ```bash
-cd clarinet/
+cd Clarinet/
 
 # 1. Create virtual environment
 python -m venv .venv
@@ -60,7 +60,7 @@ Then open http://127.0.0.1:8000 — you'll be redirected to the setup wizard.
 ## Production (Ubuntu 24.04)
 
 ```bash
-sudo bash install.sh
+sudo bash deploy/install.sh
 ```
 
 The installer:
@@ -87,14 +87,15 @@ The installer:
 ## Project Structure
 
 ```
-clarinet/
+Clarinet/
 ├── run.py                       ← dev entry point
 ├── requirements.txt
-├── .env                         ← secrets & config (DO NOT COMMIT)
-├── clarinet.service             ← systemd unit
-├── Caddyfile                    ← local HTTPS
-├── install.sh                   ← Ubuntu 24.04 installer
-└── clarinet/
+├── .env.example                 ← copy to .env and edit
+├── deploy/
+│   ├── install.sh               ← Ubuntu 24.04 installer
+│   ├── clarinet.service         ← systemd unit
+│   └── Caddyfile                ← local HTTPS
+└── clarinet/                    ← the application package
     ├── __init__.py              ← FastAPI factory
     ├── config.py                ← pydantic-settings
     ├── database.py              ← SQLAlchemy + WAL

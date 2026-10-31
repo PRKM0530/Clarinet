@@ -1,7 +1,7 @@
 [Unit]
 Description=Clarinet Network Monitor
 After=network.target
-Documentation=https://github.com/yourname/clarinet
+Documentation=https://github.com/PRKM0530/Clarinet
 
 [Service]
 Type=simple
