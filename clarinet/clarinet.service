@@ -1,0 +1,38 @@
+[Unit]
+Description=Clarinet Network Monitor
+After=network.target
+Documentation=https://github.com/yourname/clarinet
+
+[Service]
+Type=simple
+User=clarinet
+Group=clarinet
+WorkingDirectory=/opt/clarinet
+
+# Allow raw sockets for ARP scan and ICMP ping
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+
+# Load environment from .env
+EnvironmentFile=/opt/clarinet/.env
+
+# Run uvicorn — single worker (SQLite WAL)
+ExecStart=/opt/clarinet/.venv/bin/uvicorn clarinet:app \
+          --host 127.0.0.1 \
+          --port 8000 \
+          --workers 1 \
+          --log-level info \
+          --access-log
+
+Restart=on-failure
+RestartSec=5s
+
+# Harden the service
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/clarinet
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,149 @@
+{% extends "base_app.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Stat grid -->
+<div class="stat-grid">
+  <div class="stat-card stat-blue">
+    <div class="stat-label"><i class="bi bi-hdd-network"></i> Total Devices</div>
+    <div class="stat-value">{{ total_devices }}</div>
+    <div class="stat-meta">{{ online_devices }} online now</div>
+  </div>
+  <div class="stat-card stat-orange">
+    <div class="stat-label"><i class="bi bi-hourglass-split"></i> Awaiting Approval</div>
+    <div class="stat-value">{{ new_devices }}</div>
+    <div class="stat-meta">
+      {% if new_devices %}<a href="/devices" style="color:var(--orange);font-size:12px">Review →</a>{% else %}All clear{% endif %}
+    </div>
+  </div>
+  <div class="stat-card stat-red">
+    <div class="stat-label"><i class="bi bi-bell"></i> Open Alerts</div>
+    <div class="stat-value">{{ open_alerts }}</div>
+    <div class="stat-meta">
+      {% if open_alerts %}<a href="/alerts" style="color:var(--red);font-size:12px">View →</a>{% else %}No issues{% endif %}
+    </div>
+  </div>
+  {% if latest_speed %}
+  <div class="stat-card stat-green">
+    <div class="stat-label"><i class="bi bi-cloud-arrow-down"></i> Download</div>
+    <div class="stat-value">{{ latest_speed.download_mbps|round(0)|int }} <small>Mbps</small></div>
+    <div class="stat-meta">Upload {{ latest_speed.upload_mbps|round(0)|int }} Mbps</div>
+  </div>
+  <div class="stat-card {% if avg_latency and avg_latency > 80 %}stat-orange{% else %}stat-teal{% endif %}">
+    <div class="stat-label"><i class="bi bi-activity"></i> Latency</div>
+    <div class="stat-value">{{ avg_latency|round(0)|int if avg_latency else '—' }} <small>ms</small></div>
+    <div class="stat-meta">Avg over last hour</div>
+  </div>
+  {% endif %}
+  <div class="stat-card stat-purple">
+    <div class="stat-label"><i class="bi bi-database"></i> Usage Today</div>
+    <div class="stat-value">{{ (today_traffic_mb or 0)|round(0)|int }} <small>MB</small></div>
+    <div class="stat-meta">All devices combined</div>
+  </div>
+</div>
+
+<!-- Active slowdown alert -->
+{% if active_slowdown %}
+<div class="slowdown-banner">
+  <div class="slowdown-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+  <div>
+    <div style="font-size:14px;font-weight:600;color:var(--red)">Slowdown detected</div>
+    <div style="font-size:13px;color:var(--text-2);margin-top:2px">
+      {{ active_slowdown.causes[0].cause.replace('_',' ').title() if active_slowdown.causes else 'Diagnosing…' }}
+      — since {{ active_slowdown.started_at.strftime('%H:%M') if active_slowdown.started_at else '' }}
+    </div>
+  </div>
+  <a href="/slowdowns" class="btn btn-danger btn-sm" style="margin-left:auto">View details</a>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+  <!-- Recent alerts -->
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-bell" style="color:var(--text-3)"></i>
+      <span class="card-header-title">Recent Alerts</span>
+      <a href="/alerts" class="card-header-sub">View all →</a>
+    </div>
+    {% if recent_alerts %}
+    <table class="cl-table">
+      <tbody>
+        {% for a in recent_alerts[:6] %}
+        <tr>
+          <td style="width:8px;padding:10px 0 10px 14px">
+            <span class="live-dot {% if a.level == 'CRITICAL' %}critical pulse{% elif a.level == 'WARNING' %}warning{% else %}info{% endif %}"></span>
+          </td>
+          <td>
+            <div style="font-size:13px;font-weight:500">{{ a.title }}</div>
+            {% if a.device %}
+            <div style="font-size:11.5px;color:var(--text-3)">{{ a.device.label or a.device.mac_address }}</div>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;text-align:right;padding-right:14px">
+            <span class="badge badge-{{ 'red' if a.level == 'CRITICAL' else ('yellow' if a.level == 'WARNING' else 'gray') }}">
+              {{ a.level }}
+            </span>
+            <div style="font-size:11px;color:var(--text-3);margin-top:3px">{{ a.raised_at.strftime('%H:%M') }}</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-check-circle" style="color:var(--green)"></i>
+      <h4>No open alerts</h4>
+      <p>Your network looks healthy.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent devices -->
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-hdd-network" style="color:var(--text-3)"></i>
+      <span class="card-header-title">Recent Devices</span>
+      <a href="/devices" class="card-header-sub">View all →</a>
+    </div>
+    {% if top_devices %}
+    <table class="cl-table">
+      <tbody>
+        {% for d in top_devices %}
+        <tr>
+          <td style="width:36px;padding:10px 0 10px 14px">
+            <div style="width:30px;height:30px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:14px">
+              {% if 'phone' in (d.vendor or '').lower() or 'apple' in (d.vendor or '').lower() %}📱
+              {% elif 'intel' in (d.vendor or '').lower() or 'laptop' in (d.label or '').lower() %}💻
+              {% else %}📡{% endif %}
+            </div>
+          </td>
+          <td>
+            <div style="font-size:13px;font-weight:500">
+              {{ d.label or d.hostname or (d.mac_address[:14]+'…') }}
+            </div>
+            <div style="font-size:11.5px;color:var(--text-3)">{{ d.vendor or d.mac_address }}</div>
+          </td>
+          <td style="text-align:right;padding-right:14px">
+            <div style="font-size:12px;font-weight:600;color:var(--text)">{{ ((d.total or 0) / 1_048_576) | round(1) }} MB</div>
+            <span class="badge badge-{{ 'green' if d.state == 'APPROVED' else ('red' if d.state == 'BLOCKED' else ('yellow' if d.state == 'NEW' else 'blue')) }}">
+              {{ d.state }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-hdd-network"></i>
+      <h4>No devices yet</h4>
+      <p>Start the collector on Linux to discover devices.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

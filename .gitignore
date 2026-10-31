@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets and local config
+.env
+!.env.example
+
+# Runtime data
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Project docs and diagrams (kept locally, not in the repo)
+Docs/
+Diagrams/

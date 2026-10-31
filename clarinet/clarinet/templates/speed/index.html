@@ -1,0 +1,124 @@
+{% extends "base_app.html" %}
+{% block title %}Speed & Plan{% endblock %}
+{% block page_title %}Speed & Plan{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2>Speed & Plan</h2>
+      <p>ISP plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} ↓ / {{ plan_upload|round(0)|int }} ↑ Mbps</strong></p>
+    </div>
+    <form method="post" action="/speed/run">
+      <button class="btn btn-primary"><i class="bi bi-play-circle"></i> Run Speed Test Now</button>
+    </form>
+  </div>
+</div>
+
+{% if latest %}
+<div class="stat-grid" style="margin-bottom:24px">
+  <div class="stat-card stat-blue">
+    <div class="stat-label"><i class="bi bi-cloud-arrow-down"></i> Download</div>
+    <div class="stat-value">{{ latest.download_mbps|round(1) }} <small>Mbps</small></div>
+    <div class="stat-meta">Plan: {{ plan_download|round(0)|int }} Mbps</div>
+  </div>
+  <div class="stat-card stat-green">
+    <div class="stat-label"><i class="bi bi-cloud-arrow-up"></i> Upload</div>
+    <div class="stat-value">{{ latest.upload_mbps|round(1) }} <small>Mbps</small></div>
+    <div class="stat-meta">Plan: {{ plan_upload|round(0)|int }} Mbps</div>
+  </div>
+  <div class="stat-card {% if latest.latency_ms > 80 %}stat-orange{% else %}stat-teal{% endif %}">
+    <div class="stat-label"><i class="bi bi-activity"></i> Latency</div>
+    <div class="stat-value">{{ latest.latency_ms|round(0)|int }} <small>ms</small></div>
+    <div class="stat-meta">Server: {{ latest.server_host or '—' }}</div>
+  </div>
+  <div class="stat-card {% if latest.below_plan %}stat-red{% else %}stat-green{% endif %}">
+    <div class="stat-label"><i class="bi bi-check-circle"></i> Status</div>
+    <div class="stat-value" style="font-size:18px">
+      {% if latest.below_plan %}Below plan{% else %}On target{% endif %}
+    </div>
+    <div class="stat-meta">Last tested {{ latest.tested_at.strftime('%d %b %H:%M') }}</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Chart -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <i class="bi bi-graph-up" style="color:var(--text-3)"></i>
+    <span class="card-header-title">Speed History</span>
+    <span class="card-header-sub">Last 30 tests</span>
+  </div>
+  <div style="padding:20px">
+    <canvas id="speedChart" height="80"></canvas>
+  </div>
+</div>
+
+<!-- Results table -->
+<div class="card">
+  <div class="card-header">
+    <i class="bi bi-table" style="color:var(--text-3)"></i>
+    <span class="card-header-title">All Results</span>
+  </div>
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead>
+        <tr><th>Time</th><th>Download</th><th>Upload</th><th>Latency</th><th>Server</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr>
+          <td style="font-size:12px;color:var(--text-3)">{{ r.tested_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ r.download_mbps|round(1) }} Mbps</td>
+          <td>{{ r.upload_mbps|round(1) }} Mbps</td>
+          <td>{{ r.latency_ms|round(0)|int }} ms</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ r.server_host or '—' }}</td>
+          <td>
+            <span class="badge {{ 'badge-red' if r.below_plan else 'badge-green' }}">
+              {{ 'Below plan' if r.below_plan else 'OK' }}
+            </span>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">
+          <div class="empty-state">
+            <i class="bi bi-speedometer2"></i>
+            <h4>No speed tests yet</h4>
+            <p>Run a test manually or wait for the scheduled test.</p>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const labels  = {{ chart_labels | tojson }};
+const dlData  = {{ chart_dl    | tojson }};
+const ulData  = {{ chart_ul    | tojson }};
+const latData = {{ chart_lat   | tojson }};
+
+new Chart(document.getElementById('speedChart'), {
+  data: {
+    labels,
+    datasets: [
+      { type:'line', label:'Download (Mbps)', data:dlData,  borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.1)', tension:.3, fill:true, yAxisID:'y'  },
+      { type:'line', label:'Upload (Mbps)',   data:ulData,  borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.08)', tension:.3, fill:true, yAxisID:'y'  },
+      { type:'line', label:'Latency (ms)',    data:latData, borderColor:'#f97316', borderDash:[4,4], tension:.3, fill:false, yAxisID:'y2' },
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{ legend:{ position:'top', labels:{ color:'#a0a0a0', font:{ size:12 } } } },
+    scales:{
+      x:  { ticks:{ color:'#666' }, grid:{ color:'rgba(255,255,255,.05)' } },
+      y:  { position:'left',  title:{ display:true, text:'Mbps', color:'#a0a0a0' }, ticks:{ color:'#666' }, grid:{ color:'rgba(255,255,255,.05)' } },
+      y2: { position:'right', title:{ display:true, text:'ms',   color:'#a0a0a0' }, ticks:{ color:'#666' }, grid:{ drawOnChartArea:false } },
+    }
+  }
+});
+</script>
+{% endblock %}

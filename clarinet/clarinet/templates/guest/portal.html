@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Guest Portal{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="auth-logo">📡</div>
+  <div class="auth-title">Guest Wi-Fi Access</div>
+  <div class="auth-sub">Enter your voucher code to connect to the internet.</div>
+
+  {% if error %}
+  <div style="background:var(--red-bg);border:1px solid rgba(239,68,68,.25);border-radius:var(--radius);padding:10px 14px;margin-bottom:18px;font-size:13px;color:#f87171;display:flex;align-items:center;gap:8px;">
+    <i class="bi bi-exclamation-circle-fill"></i>{{ error }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/guest/redeem">
+    <div class="form-group">
+      <label class="form-label" for="code">Voucher Code</label>
+      <input type="text" id="code" name="code" class="form-input"
+             placeholder="e.g. ABCD-1234"
+             style="font-size:20px;letter-spacing:.15em;text-align:center;text-transform:uppercase"
+             autocomplete="off" autofocus required />
+      <p class="form-help" style="text-align:center">Ask the network admin for your code.</p>
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg" style="width:100%;margin-top:8px">
+      <i class="bi bi-wifi"></i> Connect
+    </button>
+  </form>
+</div>
+{% endblock %}

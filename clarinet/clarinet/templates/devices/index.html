@@ -1,0 +1,172 @@
+{% extends "base_app.html" %}
+{% block title %}Devices{% endblock %}
+{% block page_title %}Devices{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <h2>Devices</h2>
+      <p>{{ devices|length }} device(s) discovered on your network.</p>
+    </div>
+    <div class="search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" class="form-input search-input" id="device-search" placeholder="Search devices…" />
+    </div>
+  </div>
+  {% if new_count %}
+  <div style="margin-top:14px;background:var(--yellow-bg);border:1px solid rgba(234,179,8,.25);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#fbbf24;display:flex;align-items:center;gap:8px;">
+    <i class="bi bi-hourglass-split"></i>
+    <strong>{{ new_count }} device(s)</strong> are waiting for your approval.
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="cl-table" id="device-table">
+      <thead>
+        <tr>
+          <th>Device</th>
+          <th>MAC Address</th>
+          <th>IP Address</th>
+          <th>Vendor</th>
+          <th>Owner</th>
+          <th>Last Seen</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in devices %}
+        <tr class="device-row">
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:8px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">
+                {% if 'apple' in (d.vendor or '').lower() %}🍎
+                {% elif 'phone' in (d.label or '').lower() or 'iphone' in (d.label or '').lower() %}📱
+                {% elif 'laptop' in (d.label or '').lower() or 'book' in (d.label or '').lower() %}💻
+                {% elif 'tv' in (d.label or '').lower() or 'samsung' in (d.vendor or '').lower() %}📺
+                {% else %}📡{% endif %}
+              </div>
+              <div>
+                <a href="/devices/{{ d.device_id }}" style="font-size:13px;font-weight:600;color:var(--text)">
+                  {{ d.label or d.hostname or '—' }}
+                </a>
+                {% if d.is_random_mac %}
+                <span title="Randomised MAC" style="font-size:11px;color:var(--yellow);margin-left:4px">
+                  <i class="bi bi-shuffle"></i>
+                </span>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td><code style="color:var(--text-2)">{{ d.mac_address }}</code></td>
+          <td><code style="color:var(--text-2)">{{ d.ip_address or '—' }}</code></td>
+          <td style="color:var(--text-2);font-size:12.5px">{{ d.vendor or '—' }}</td>
+          <td style="font-size:12.5px;color:var(--text-2)">{{ d.owner.username if d.owner else '—' }}</td>
+          <td style="font-size:12px;color:var(--text-3);white-space:nowrap">
+            {{ d.last_seen.strftime('%d %b %H:%M') if d.last_seen else '—' }}
+          </td>
+          <td>
+            <span class="badge badge-{{ 'yellow' if d.state == 'NEW' else ('green' if d.state == 'APPROVED' else ('red' if d.state == 'BLOCKED' else 'blue')) }}">
+              {{ d.state }}
+            </span>
+          </td>
+          <td style="text-align:right;padding-right:14px">
+            <div style="display:flex;gap:4px;justify-content:flex-end">
+              {% if d.state != 'APPROVED' %}
+              <button class="btn btn-success btn-sm btn-icon" title="Approve"
+                      onclick="openApprove({{ d.device_id }}, '{{ d.mac_address }}', '{{ d.hostname or '' }}')">
+                <i class="bi bi-check-lg"></i>
+              </button>
+              {% endif %}
+              {% if d.state != 'BLOCKED' %}
+              <form method="post" action="/devices/{{ d.device_id }}/block"
+                    onsubmit="return confirm('Block {{ d.mac_address }}?')">
+                <button class="btn btn-danger btn-sm btn-icon" title="Block">
+                  <i class="bi bi-slash-circle"></i>
+                </button>
+              </form>
+              {% endif %}
+              <a href="/devices/{{ d.device_id }}" class="btn btn-ghost btn-sm btn-icon" title="Details">
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr class="device-row">
+          <td colspan="8">
+            <div class="empty-state">
+              <i class="bi bi-hdd-network"></i>
+              <h4>No devices discovered yet</h4>
+              <p>Start the collector on Linux to begin ARP scanning.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Approve Modal -->
+<div class="modal-overlay" id="approve-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Approve Device</span>
+      <button class="modal-close" onclick="closeModal('approve-modal')">×</button>
+    </div>
+    <form method="post" id="approve-form">
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">
+          MAC: <code id="approve-mac"></code>
+        </p>
+        <div class="form-group">
+          <label class="form-label">Label (optional)</label>
+          <input type="text" name="label" id="approve-label" class="form-input"
+                 placeholder="e.g. Alice's iPhone" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assign to member</label>
+          <select name="owner_id" class="form-select">
+            <option value="">— No owner —</option>
+            {% for m in members %}
+            <option value="{{ m.member_id }}">{{ m.username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('approve-modal')">Cancel</button>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Approve</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Search filter
+document.getElementById('device-search').addEventListener('input', function() {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#device-table tbody tr.device-row').forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
+// Approve modal
+function openApprove(id, mac, hostname) {
+  document.getElementById('approve-form').action = '/devices/' + id + '/approve';
+  document.getElementById('approve-mac').textContent = mac;
+  document.getElementById('approve-label').value = hostname;
+  document.getElementById('approve-modal').classList.add('open');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.getElementById('approve-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal('approve-modal');
+});
+</script>
+{% endblock %}

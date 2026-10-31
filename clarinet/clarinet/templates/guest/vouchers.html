@@ -1,0 +1,102 @@
+{% extends "base_app.html" %}
+{% block title %}Guest Vouchers{% endblock %}
+{% block page_title %}Guest Vouchers{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <h2>Guest Vouchers</h2>
+      <p>One-time access codes for guests. Share a code — it grants timed internet access.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('create-voucher-modal')">
+      <i class="bi bi-plus"></i> Create Voucher
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead>
+        <tr><th>Code</th><th>Created</th><th>Expires</th><th>Data Cap</th><th>Speed Cap</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for v in vouchers %}
+        <tr>
+          <td>
+            <code style="font-size:15px;font-weight:700;letter-spacing:.1em;color:var(--text)">{{ v.code }}</code>
+          </td>
+          <td style="font-size:12px;color:var(--text-3)">{{ v.created_at.strftime('%d %b %H:%M') }}</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ v.expires_at.strftime('%d %b %H:%M') }}</td>
+          <td style="font-size:13px;color:var(--text-2)">{{ v.data_cap_mb|string + ' MB' if v.data_cap_mb else 'Unlimited' }}</td>
+          <td style="font-size:13px;color:var(--text-2)">{{ v.speed_cap_mbps|string + ' Mbps' if v.speed_cap_mbps else 'Unlimited' }}</td>
+          <td>
+            <span class="badge {{ 'badge-green' if v.status == 'UNUSED' else ('badge-blue' if v.status == 'ACTIVE' else ('badge-gray' if v.status == 'EXPIRED' else 'badge-red')) }}">
+              {{ v.status }}
+            </span>
+          </td>
+          <td style="text-align:right;padding-right:14px">
+            {% if v.status in ('UNUSED', 'ACTIVE') %}
+            <form method="post" action="/vouchers/{{ v.voucher_id }}/revoke"
+                  onsubmit="return confirm('Revoke voucher {{ v.code }}?')">
+              <button class="btn btn-danger btn-sm"><i class="bi bi-x-circle"></i> Revoke</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">
+          <div class="empty-state">
+            <i class="bi bi-ticket-perforated"></i>
+            <h4>No vouchers yet</h4>
+            <p>Create a voucher to share guest Wi-Fi access.</p>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create Voucher Modal -->
+<div class="modal-overlay" id="create-voucher-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Create Guest Voucher</span>
+      <button class="modal-close" onclick="closeModal('create-voucher-modal')">×</button>
+    </div>
+    <form method="post" action="/vouchers/create">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Valid for (hours)</label>
+          <input type="number" name="expires_hours" class="form-input" value="24" min="1" max="720" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data cap (MB) — leave blank for unlimited</label>
+          <input type="number" name="data_cap_mb" class="form-input" placeholder="e.g. 500" min="1" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Speed cap (Mbps) — leave blank for unlimited</label>
+          <input type="number" name="speed_cap_mbps" class="form-input" placeholder="e.g. 5" min="0.1" step="0.1" />
+        </div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:12.5px;color:var(--text-2)">
+          <i class="bi bi-info-circle" style="color:var(--accent);margin-right:6px"></i>
+          Share the code at <strong style="color:var(--text)">http://&lt;your-server&gt;/guest</strong> — guests enter it to get access.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('create-voucher-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-ticket-perforated"></i> Generate</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+</script>
+{% endblock %}

@@ -1,0 +1,153 @@
+{% extends "base_app.html" %}
+{% block title %}Time Rules{% endblock %}
+{% block page_title %}Time Rules{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <h2>Time Rules</h2>
+      <p>Schedule internet access restrictions per device.</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('create-rule-modal')">
+      <i class="bi bi-plus"></i> New Rule
+    </button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead>
+        <tr><th>Device</th><th>Days</th><th>Time Window</th><th>Action</th><th>Rate</th><th>Active</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in rules %}
+        <tr style="{{ 'opacity:.45' if not r.active else '' }}">
+          <td>
+            <a href="/devices/{{ r.device.device_id }}" style="font-weight:500;color:var(--text)">
+              {{ r.device.label or r.device.mac_address }}
+            </a>
+          </td>
+          <td>
+            <div style="display:flex;gap:4px;flex-wrap:wrap">
+              {% for d in r.days %}
+              <span class="badge badge-gray" style="font-size:10px">{{ d[:3] }}</span>
+              {% endfor %}
+            </div>
+          </td>
+          <td><code style="font-size:12.5px;color:var(--text-2)">{{ r.start_time }} – {{ r.end_time }}</code></td>
+          <td>
+            <span class="badge {{ 'badge-red' if r.action == 'BLOCK' else 'badge-orange' }}">
+              {{ r.action.replace('_', ' ') }}
+            </span>
+          </td>
+          <td style="color:var(--text-2);font-size:12.5px">{{ r.rate_kbps|string + ' kbps' if r.rate_kbps else '—' }}</td>
+          <td>
+            <span class="badge {{ 'badge-green' if r.active else 'badge-gray' }}">
+              {{ 'Active' if r.active else 'Paused' }}
+            </span>
+          </td>
+          <td style="text-align:right;padding-right:14px">
+            <div style="display:flex;gap:4px;justify-content:flex-end">
+              <form method="post" action="/rules/{{ r.rule_id }}/exception">
+                <button class="btn btn-ghost btn-sm btn-icon" title="Grant 1-hour exception">
+                  <i class="bi bi-clock"></i>
+                </button>
+              </form>
+              <form method="post" action="/rules/{{ r.rule_id }}/toggle">
+                <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Pause' if r.active else 'Resume' }}">
+                  <i class="bi bi-{{ 'pause-fill' if r.active else 'play-fill' }}"></i>
+                </button>
+              </form>
+              <form method="post" action="/rules/{{ r.rule_id }}/delete"
+                    onsubmit="return confirm('Delete this rule?')">
+                <button class="btn btn-danger btn-sm btn-icon" title="Delete">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">
+          <div class="empty-state">
+            <i class="bi bi-clock"></i>
+            <h4>No time rules yet</h4>
+            <p>Create a rule to restrict a device's internet access on a schedule.</p>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create Rule Modal -->
+<div class="modal-overlay" id="create-rule-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">New Time Rule</span>
+      <button class="modal-close" onclick="closeModal('create-rule-modal')">×</button>
+    </div>
+    <form method="post" action="/rules/create">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Device</label>
+          <select name="device_id" class="form-select" required>
+            {% for d in devices %}
+            <option value="{{ d.device_id }}">{{ d.label or d.hostname or d.mac_address }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Days of week</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            {% for day in days %}
+            <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer;padding:4px 8px;border:1px solid var(--border-2);border-radius:var(--radius);color:var(--text-2)">
+              <input type="checkbox" name="days" value="{{ day }}" checked style="accent-color:var(--accent)" />
+              {{ day[:3] }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Start time</label>
+            <input type="time" name="start_time" class="form-input" value="22:00" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">End time</label>
+            <input type="time" name="end_time" class="form-input" value="07:00" required />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Action</label>
+          <select name="action" class="form-select" id="rule-action">
+            <option value="BLOCK">Block — no internet</option>
+            <option value="RATE_LIMIT">Rate limit — slow down</option>
+          </select>
+        </div>
+        <div class="form-group" id="rate-field" style="display:none">
+          <label class="form-label">Rate limit (kbps)</label>
+          <input type="number" name="rate_kbps" class="form-input" placeholder="e.g. 512" min="64" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('create-rule-modal')">Cancel</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-plus"></i> Create Rule</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+document.getElementById('rule-action').addEventListener('change', function() {
+  document.getElementById('rate-field').style.display = this.value === 'RATE_LIMIT' ? '' : 'none';
+});
+</script>
+{% endblock %}

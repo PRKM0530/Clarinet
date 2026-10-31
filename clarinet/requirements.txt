@@ -1,0 +1,37 @@
+# ── Web framework ──────────────────────────────────────────────────────────────
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+pydantic-settings==2.6.1    # typed settings from .env
+jinja2==3.1.4
+python-multipart==0.0.12   # form parsing
+itsdangerous==2.2.0        # session cookie signing
+
+# ── Database ───────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.36
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+passlib[bcrypt]==1.7.4
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── Scheduler (rules, summaries, voucher expiry) ───────────────────────────────
+apscheduler==3.10.4
+
+# ── Analytics ──────────────────────────────────────────────────────────────────
+pandas==2.2.3
+numpy==2.1.3
+
+# ── Network probing ────────────────────────────────────────────────────────────
+dnspython==2.7.0
+icmplib==3.0.4             # ICMP ping / latency (requires root on Linux)
+
+# ── WebSockets (live alerts) ───────────────────────────────────────────────────
+websockets==13.1
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Linux-only — uncomment after deploying to Ubuntu 24.04
+# scapy==2.6.1             # ARP scan, passive sniff
+# zeroconf==0.136.2        # mDNS device names
+# python-nftables==0.1.2   # nftables (blocking / vouchers)
+# ──────────────────────────────────────────────────────────────────────────────

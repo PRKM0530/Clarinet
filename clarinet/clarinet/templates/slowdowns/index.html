@@ -1,0 +1,97 @@
+{% extends "base_app.html" %}
+{% block title %}Slowdowns{% endblock %}
+{% block page_title %}Slowdown Events{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Slowdown Events</h2>
+  <p>Detected network slowdowns with AI-powered root-cause analysis.</p>
+</div>
+
+{% if active %}
+<div class="slowdown-banner" style="margin-bottom:24px">
+  <div class="slowdown-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+  <div>
+    <div style="font-size:14.5px;font-weight:700;color:var(--red)">Active Slowdown</div>
+    <div style="font-size:13px;color:var(--text-2);margin-top:3px">
+      Detected {{ active.started_at.strftime('%H:%M') }} ·
+      {% if active.causes %}
+        Root cause: <strong>{{ active.causes[0].get('cause','').replace('_',' ').title() }}</strong>
+        <span class="badge badge-{{ 'red' if active.causes[0].get('confidence') == 'HIGH' else 'yellow' }}" style="margin-left:6px">
+          {{ active.causes[0].get('confidence','') }}
+        </span>
+      {% else %}Diagnosing…{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if events %}
+{% for item in events %}
+{% set e = item.event %}
+{% set causes = item.causes %}
+{% set raw = item.raw %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-header">
+    <i class="bi bi-exclamation-circle" style="color:{{ 'var(--red)' if not e.ended_at else 'var(--text-3)' }}"></i>
+    <div>
+      <div class="card-header-title">{{ e.started_at.strftime('%d %b %Y, %H:%M') }}</div>
+      <div style="font-size:11.5px;color:var(--text-3);margin-top:1px">
+        {% if e.ended_at %}
+          Duration: {{ ((e.ended_at - e.started_at).seconds // 60) }} min ·
+          Ended {{ e.ended_at.strftime('%H:%M') }}
+        {% else %}
+          <span style="color:var(--red);font-weight:600">Still ongoing</span>
+        {% endif %}
+      </div>
+    </div>
+    <span class="card-header-sub">
+      <span class="badge {{ 'badge-red' if not e.ended_at else 'badge-gray' }}">
+        {{ 'ACTIVE' if not e.ended_at else 'RESOLVED' }}
+      </span>
+    </span>
+  </div>
+  {% if causes %}
+  <div class="card-body" style="padding:16px 18px">
+    {% for c in causes %}
+    <div style="display:flex;align-items:flex-start;gap:14px;padding:10px 0;{{ 'border-top:1px solid var(--border)' if not loop.first else '' }}">
+      <span class="badge badge-{{ 'red' if c.get('confidence') == 'HIGH' else ('yellow' if c.get('confidence') == 'MEDIUM' else 'gray') }}" style="flex-shrink:0;margin-top:2px">
+        {{ c.get('confidence','') }}
+      </span>
+      <div>
+        <div style="font-size:13.5px;font-weight:600;color:var(--text)">
+          {{ c.get('cause','').replace('_',' ').title() }}
+        </div>
+        <div style="font-size:12.5px;color:var(--text-2);margin-top:3px">{{ c.get('detail') or '—' }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% if raw %}
+  <div style="background:var(--surface-2);padding:12px 18px;border-top:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:8px">Raw Metrics at Detection</div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap">
+      {% for k,v in raw.items() %}
+      <div>
+        <span style="font-size:11px;color:var(--text-3)">{{ k.replace('_',' ') }}</span>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">{{ v }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="empty-state" style="padding:24px">
+    <p>No causes logged.</p>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% else %}
+<div class="empty-state" style="margin-top:40px">
+  <i class="bi bi-check-circle" style="color:var(--green)"></i>
+  <h4>No slowdown events</h4>
+  <p>Clarinet monitors your latency and speed 24/7. Events appear here automatically.</p>
+</div>
+{% endif %}
+{% endblock %}

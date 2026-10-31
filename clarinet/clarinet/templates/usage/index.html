@@ -1,0 +1,82 @@
+{% extends "base_app.html" %}
+{% block title %}Usage{% endblock %}
+{% block page_title %}Data Usage{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Data Usage</h2>
+  <p>Per-device traffic over the last 7 days.</p>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <i class="bi bi-bar-chart-line" style="color:var(--text-3)"></i>
+    <span class="card-header-title">7-Day Traffic</span>
+    <span class="card-header-sub">All devices stacked</span>
+  </div>
+  <div style="padding:20px">
+    <canvas id="usageChart" height="80"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <i class="bi bi-table" style="color:var(--text-3)"></i>
+    <span class="card-header-title">Daily Totals</span>
+  </div>
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead>
+        <tr><th>Device</th><th>Date</th><th>Download</th><th>Upload</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td style="font-weight:500">{{ r.label or r.hostname or r.mac_address }}</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ r.date }}</td>
+          <td>{{ (r.bytes_in / 1_048_576)|round(1) }} MB</td>
+          <td>{{ (r.bytes_out / 1_048_576)|round(1) }} MB</td>
+          <td style="font-weight:600">{{ ((r.bytes_in + r.bytes_out) / 1_048_576)|round(1) }} MB</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">
+          <div class="empty-state">
+            <i class="bi bi-bar-chart-line"></i>
+            <h4>No usage data yet</h4>
+            <p>The collector records traffic in hourly buckets on Linux.</p>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const labels    = {{ date_labels | tojson }};
+const chartData = {{ chart_data  | tojson }};
+const COLORS = ['#3b82f6','#22c55e','#f97316','#ef4444','#a855f7','#14b8a6','#ec4899','#eab308'];
+
+const datasets = Object.entries(chartData).map(([name, daily], i) => ({
+  label: name,
+  data: labels.map(d => Math.round((daily[d] || 0) / 1048576 * 10) / 10),
+  backgroundColor: COLORS[i % COLORS.length] + 'bb',
+  borderColor: COLORS[i % COLORS.length],
+  borderWidth: 1,
+}));
+
+new Chart(document.getElementById('usageChart'), {
+  type: 'bar',
+  data: { labels, datasets },
+  options: {
+    responsive: true,
+    plugins: { legend: { position:'right', labels:{ color:'#a0a0a0', font:{ size:12 } } } },
+    scales: {
+      x: { stacked:true, ticks:{ color:'#666' }, grid:{ color:'rgba(255,255,255,.05)' } },
+      y: { stacked:true, title:{ display:true, text:'MB', color:'#a0a0a0' }, ticks:{ color:'#666' }, grid:{ color:'rgba(255,255,255,.05)' } }
+    }
+  }
+});
+</script>
+{% endblock %}

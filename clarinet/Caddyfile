@@ -1,0 +1,38 @@
+# Caddyfile — local HTTPS for Clarinet (SYS-3)
+# Caddy auto-provisions a self-signed cert for LAN hostnames.
+#
+# Add to /etc/hosts on every client:
+#   <server-ip>   clarinet.local
+#
+# Or use your local DNS / mDNS instead.
+
+clarinet.local {
+  # Reverse-proxy to uvicorn
+  reverse_proxy localhost:8000
+
+  # WebSocket support (needed for /ws/alerts)
+  reverse_proxy /ws/* localhost:8000 {
+    header_up Connection {>Connection}
+    header_up Upgrade {>Upgrade}
+  }
+
+  # Serve static files directly (skip uvicorn for speed)
+  file_server /static/* {
+    root /opt/clarinet/clarinet/static
+  }
+
+  # Harden headers
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    -Server
+  }
+
+  # Access log
+  log {
+    output file /var/log/caddy/clarinet_access.log
+    format json
+  }
+}

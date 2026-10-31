@@ -1,0 +1,98 @@
+{% extends "base_app.html" %}
+{% block title %}Priority Access{% endblock %}
+{% block page_title %}Priority Access{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Priority Access</h2>
+  <p>Request or approve temporary bandwidth priority for a device.</p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1.6fr;gap:20px;align-items:start">
+
+  <!-- Request form -->
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-rocket" style="color:var(--accent)"></i>
+      <span class="card-header-title">Request Priority</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/priority/request">
+        <div class="form-group">
+          <label class="form-label">Device</label>
+          <select name="device_id" class="form-select" required>
+            {% for d in my_devices %}
+            <option value="{{ d.device_id }}">{{ d.label or d.hostname or d.mac_address }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Duration (minutes)</label>
+          <select name="duration_min" class="form-select">
+            <option value="30">30 minutes</option>
+            <option value="60" selected>1 hour</option>
+            <option value="120">2 hours</option>
+            <option value="240">4 hours</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reason</label>
+          <textarea name="reason" class="form-textarea" rows="2" placeholder="e.g. Video call at 6 PM"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%">
+          <i class="bi bi-rocket"></i> Request Priority
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Grants table -->
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-list-check" style="color:var(--text-3)"></i>
+      <span class="card-header-title">All Requests</span>
+    </div>
+    <div class="table-wrap">
+      <table class="cl-table">
+        <thead>
+          <tr><th>Device</th><th>Member</th><th>Reason</th><th>Duration</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for g in grants %}
+          <tr>
+            <td style="font-weight:500">{{ g.device.label or g.device.mac_address }}</td>
+            <td style="font-size:12.5px;color:var(--text-2)">{{ g.member.username }}</td>
+            <td style="font-size:12.5px;color:var(--text-2)">{{ g.reason or '—' }}</td>
+            <td style="font-size:12.5px;color:var(--text-2)">{{ g.duration_min }} min</td>
+            <td>
+              <span class="badge {{ 'badge-yellow' if g.decision == 'PENDING' else ('badge-green' if g.decision == 'APPROVED' else 'badge-red') }}">
+                {{ g.decision }}
+              </span>
+            </td>
+            <td style="text-align:right;padding-right:14px">
+              {% if user.is_admin and g.decision == 'PENDING' %}
+              <div style="display:flex;gap:4px">
+                <form method="post" action="/priority/{{ g.grant_id }}/approve">
+                  <button class="btn btn-success btn-sm btn-icon" title="Approve"><i class="bi bi-check-lg"></i></button>
+                </form>
+                <form method="post" action="/priority/{{ g.grant_id }}/deny">
+                  <button class="btn btn-danger btn-sm btn-icon" title="Deny"><i class="bi bi-x-lg"></i></button>
+                </form>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">
+            <div class="empty-state">
+              <i class="bi bi-rocket"></i>
+              <h4>No requests yet</h4>
+            </div>
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

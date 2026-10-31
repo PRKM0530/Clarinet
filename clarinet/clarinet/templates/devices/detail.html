@@ -1,0 +1,100 @@
+{% extends "base_app.html" %}
+{% block title %}{{ device.label or device.mac_address }}{% endblock %}
+{% block page_title %}
+<span style="display:flex;align-items:center;gap:10px">
+  <a href="/devices" style="color:var(--text-3);font-size:13px;font-weight:400">Devices</a>
+  <i class="bi bi-chevron-right" style="color:var(--text-3);font-size:12px"></i>
+  {{ device.label or device.hostname or device.mac_address }}
+</span>
+{% endblock %}
+{% block content %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+  <!-- Device info card -->
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-hdd-network" style="color:var(--accent)"></i>
+      <span class="card-header-title">Device Info</span>
+      <span class="badge badge-{{ 'green' if device.state == 'APPROVED' else ('red' if device.state == 'BLOCKED' else 'yellow') }}" style="margin-left:auto">
+        {{ device.state }}
+      </span>
+    </div>
+    <div class="card-body">
+      {% macro row(label, value) %}
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--text-3)">{{ label }}</span>
+        <span style="color:var(--text);font-weight:500;text-align:right;max-width:60%">{{ value }}</span>
+      </div>
+      {% endmacro %}
+      {{ row('MAC Address', device.mac_address) }}
+      {{ row('IP Address', device.ip_address or '—') }}
+      {{ row('Hostname', device.hostname or '—') }}
+      {{ row('Vendor', device.vendor or '—') }}
+      {{ row('Owner', device.owner.username if device.owner else '—') }}
+      {{ row('First seen', device.first_seen.strftime('%d %b %Y %H:%M')) }}
+      {{ row('Last seen', device.last_seen.strftime('%d %b %Y %H:%M')) }}
+      <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px">
+        <span style="color:var(--text-3)">Randomised MAC</span>
+        <span class="badge {{ 'badge-yellow' if device.is_random_mac else 'badge-green' }}">
+          {{ 'Yes ⚠️' if device.is_random_mac else 'No' }}
+        </span>
+      </div>
+    </div>
+    <!-- Edit label -->
+    <div class="card-footer">
+      <form method="post" action="/devices/{{ device.device_id }}/label" style="display:flex;gap:8px;width:100%">
+        <input type="text" name="label" class="form-input" value="{{ device.label or '' }}" placeholder="Set a label…" />
+        <button type="submit" class="btn btn-secondary"><i class="bi bi-floppy"></i> Save</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Connection history -->
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-clock-history" style="color:var(--text-3)"></i>
+      <span class="card-header-title">Connection History</span>
+    </div>
+    <div style="padding:4px 0">
+      <ul class="timeline" style="padding:0 18px">
+        {% for h in history %}
+        <li class="timeline-item">
+          <span class="timeline-dot {{ 'join' if h.event == 'JOIN' else 'leave' }}"></span>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text)">
+              {{ 'Connected' if h.event == 'JOIN' else 'Disconnected' }}
+            </div>
+            <div style="font-size:12px;color:var(--text-3)">
+              {{ h.timestamp.strftime('%d %b %H:%M') }}
+              {% if h.ip_address %} · {{ h.ip_address }}{% endif %}
+            </div>
+          </div>
+        </li>
+        {% else %}
+        <li style="padding:24px 0;text-align:center;color:var(--text-3);font-size:13px">No history</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- Quick actions row -->
+<div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+  {% if device.state != 'BLOCKED' %}
+  <form method="post" action="/devices/{{ device.device_id }}/block"
+        onsubmit="return confirm('Block this device?')">
+    <button class="btn btn-danger"><i class="bi bi-slash-circle"></i> Block Device</button>
+  </form>
+  {% endif %}
+  {% if device.state != 'APPROVED' %}
+  <form method="post" action="/devices/{{ device.device_id }}/approve">
+    <button class="btn btn-success"><i class="bi bi-check-lg"></i> Approve Device</button>
+  </form>
+  {% endif %}
+  <a href="/rules?device={{ device.device_id }}" class="btn btn-secondary">
+    <i class="bi bi-clock"></i> Add Time Rule
+  </a>
+</div>
+{% endblock %}
