@@ -7,7 +7,7 @@ On Windows / dev machines, this module is gracefully skipped.
 
 Phase 2 will add:
   - Passive ARP sniffing (scapy.sniff)
-  - ARP spoofing detection (same IP, two different MACs)
+  - (ARP spoofing detection lives in arp_spoof.py)
   - OUI vendor lookup for is_random_mac detection
   - mDNS hostname resolution via python-zeroconf
 """
@@ -16,12 +16,9 @@ import logging
 import socket
 from datetime import datetime, timezone
 
+from clarinet.collector import arp_spoof
+
 log = logging.getLogger("clarinet.collector.arp")
-
-# In-memory IP → MAC cache for ARP spoof detection
-# Format: { "192.168.1.5": "AA:BB:CC:DD:EE:FF" }
-_ip_mac_cache: dict[str, str] = {}
-
 
 def get_vendor_from_mac(mac: str) -> str | None:
     """
@@ -107,7 +104,7 @@ def upsert_devices(scan_results: list[dict]) -> None:
 
             # Check for ARP spoofing before upserting
             if ip:
-                detect_arp_spoof(ip, mac)
+                arp_spoof.check(ip, mac)
 
             existing = db.query(Device).filter(Device.mac_address == mac).first()
             now = datetime.now(timezone.utc)
@@ -159,49 +156,6 @@ def upsert_devices(scan_results: list[dict]) -> None:
                     existing.vendor = vendor
 
         db.commit()
-
-
-def detect_arp_spoof(ip: str, mac: str) -> bool:
-    """
-    Check if this IP was previously seen with a different MAC.
-    If so, it's likely ARP spoofing / poisoning.
-    Returns True and raises a CRITICAL alert if spoofing detected.
-    """
-    global _ip_mac_cache
-    prev_mac = _ip_mac_cache.get(ip)
-    _ip_mac_cache[ip] = mac
-
-    if prev_mac and prev_mac != mac:
-        log.warning("ARP SPOOF DETECTED: IP %s changed MAC %s → %s", ip, prev_mac, mac)
-        try:
-            from clarinet.database import SessionLocal
-            from clarinet.models import Alert
-            from clarinet.routers.ws import broadcast_alert_sync
-            with SessionLocal() as db:
-                alert = Alert(
-                    level="CRITICAL",
-                    type="ARP_SPOOF",
-                    title=f"ARP spoofing detected on {ip}",
-                    message=(
-                        f"IP {ip} previously answered ARP as {prev_mac} but now "
-                        f"responds as {mac}. Possible ARP poisoning / MITM attack."
-                    ),
-                )
-                db.add(alert)
-                db.commit()
-                broadcast_alert_sync({
-                    "type": "ARP_SPOOF",
-                    "level": "CRITICAL",
-                    "title": alert.title,
-                    "message": alert.message,
-                    "ip": ip,
-                    "old_mac": prev_mac,
-                    "new_mac": mac,
-                })
-        except Exception as e:
-            log.error("Failed to raise ARP spoof alert: %s", e)
-        return True
-    return False
 
 
 def run_scan_loop(interface: str) -> None:

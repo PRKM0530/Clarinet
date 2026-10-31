@@ -110,38 +110,14 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # Routers
-from clarinet.routers import (
-    auth_routes,
-    setup_routes,
-    dashboard,
-    devices,
-    alerts,
-    usage,
-    rules,
-    speed,
-    guest,
-    priority,
-    security,
-    slowdowns,
-    settings_routes,
-    api,
-)
+import importlib
+import pkgutil
 
-app.include_router(auth_routes.router)
-app.include_router(setup_routes.router)
-app.include_router(dashboard.router)
-app.include_router(devices.router)
-app.include_router(alerts.router)
-app.include_router(usage.router)
-app.include_router(rules.router)
-app.include_router(speed.router)
-app.include_router(guest.router)
-app.include_router(priority.router)
-app.include_router(security.router)
-app.include_router(slowdowns.router)
-app.include_router(settings_routes.router)
-app.include_router(api.router)
+from clarinet import routers as _routers_pkg
 
-# WebSocket router for live alerts
-from clarinet.routers import ws
-app.include_router(ws.router)
+# Every module in clarinet/routers/ that defines `router` is registered, so a
+# new feature only needs to drop its router file there.
+for _mod in sorted(pkgutil.iter_modules(_routers_pkg.__path__), key=lambda m: m.name):
+    _router = getattr(importlib.import_module(f"{_routers_pkg.__name__}.{_mod.name}"), "router", None)
+    if _router is not None:
+        app.include_router(_router)

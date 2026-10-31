@@ -1,5 +1,5 @@
 """
-clarinet/models.py
+clarinet/models/core.py
 All SQLAlchemy ORM models.
 
 Tables:
