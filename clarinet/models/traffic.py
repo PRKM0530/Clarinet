@@ -107,3 +107,4 @@ class CollectorHeartbeat(Base):
     # Expected interval so watchdog can compute lag
     interval_s: Mapped[int] = mapped_column(Integer, default=60)
     ok: Mapped[bool] = mapped_column(Integer, default=True)  # reuse Integer for SQLite compat
+

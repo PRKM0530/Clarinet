@@ -52,3 +52,4 @@ def network_word(mode: NetworkMode) -> str:
 def can_enforce(mode: NetworkMode) -> bool:
     """True if the mode allows blocking / rate-limiting devices."""
     return mode == NetworkMode.FULL
+

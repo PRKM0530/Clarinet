@@ -97,3 +97,4 @@ class DeviceHint(Base):
     hint_value: Mapped[str] = mapped_column(String(256), nullable=False)
     confidence: Mapped[float] = mapped_column(Integer, default=100)  # 0-100
     detected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+

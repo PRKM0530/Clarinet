@@ -100,3 +100,4 @@ def purge_all_data(db: Session) -> dict[str, int]:
     db.commit()
     log.warning("Factory reset executed: %s", counts)
     return counts
+

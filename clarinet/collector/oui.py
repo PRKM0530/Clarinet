@@ -86,3 +86,4 @@ def invalidate_cache() -> None:
     """Force reload of OUI table on next lookup (e.g. after update_oui.py run)."""
     global _oui_table
     _oui_table = None
+

@@ -109,3 +109,4 @@ def member_client(app, engine, _make_admin, _make_member):
     resp = client.post("/login", data={"username": "alice", "password": "Alice@secure1"})
     assert resp.status_code in (200, 302), f"Member login failed: {resp.status_code}"
     return client
+

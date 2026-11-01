@@ -94,3 +94,4 @@ def period_fraction_elapsed(billing_day: int, ref: date | None = None) -> float:
     total_days = (end - start).days + 1
     elapsed = (ref - start).days + 1
     return min(1.0, elapsed / total_days) if total_days > 0 else 0.0
+

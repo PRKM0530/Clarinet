@@ -120,3 +120,4 @@ def status_page(request: Request, db: Session = Depends(get_db)):
         "iface": get_setting(db, "network_interface") or "—",
         "router_ip": get_setting(db, "router_ip") or "—",
     })
+

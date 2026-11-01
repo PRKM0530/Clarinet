@@ -150,3 +150,4 @@ def resolve_alert_by_id(db: Session, alert_id: int) -> bool:
     alert.status = "RESOLVED"
     db.commit()
     return True
+

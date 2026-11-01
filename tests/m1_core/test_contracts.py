@@ -108,3 +108,4 @@ def test_c08_lazy_imports_dont_break_on_windows():
     src = NftAccountingSource()
     result = src.read()  # should return {} not raise
     assert isinstance(result, dict)
+

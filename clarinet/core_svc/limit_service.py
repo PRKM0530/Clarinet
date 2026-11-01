@@ -161,3 +161,4 @@ def check_and_alert(db: Session) -> None:
             ),
             cooldown_s=7200,
         )
+

@@ -88,3 +88,4 @@ def check_password(password: str, username: str = "") -> list[str]:
 def is_valid_password(password: str, username: str = "") -> bool:
     """Convenience wrapper — returns True if the password passes all checks."""
     return len(check_password(password, username)) == 0
+

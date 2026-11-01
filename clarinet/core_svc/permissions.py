@@ -53,3 +53,4 @@ def require_device_access(
     if not can_view_device(db, member, device_id):
         return None
     return db.get(Device, device_id)
+

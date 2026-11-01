@@ -167,3 +167,4 @@ def test_successful_login_resets_counter():
     assert err is None
     assert member.failed_attempts == 0
     assert member.locked_until is None
+

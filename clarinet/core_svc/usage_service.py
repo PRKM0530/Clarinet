@@ -141,3 +141,4 @@ def usage_for(
         result.by_hour[rec.hour] = hr_total + rec.bytes_in + rec.bytes_out
 
     return result
+

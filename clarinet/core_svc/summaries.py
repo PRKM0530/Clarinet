@@ -215,3 +215,4 @@ def build_weekly_summary(db: Session, week_end: date | None = None) -> WeeklySum
         avg_slowdown_minutes=avg_slow_min,
         open_alerts=open_alerts,
     )
+

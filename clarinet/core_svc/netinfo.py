@@ -146,3 +146,4 @@ def recommend_mode(caps: dict[str, bool]) -> str:
     if caps.get("has_nft") and caps.get("has_root"):
         return "FULL"
     return "MONITOR"
+

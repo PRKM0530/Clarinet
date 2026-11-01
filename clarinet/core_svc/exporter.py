@@ -68,3 +68,4 @@ def usage_to_csv(records: list[Any]) -> str:
             r.bytes_in, r.bytes_out, r.bytes_in + r.bytes_out,
         ])
     return rows_to_csv(headers, rows)
+

@@ -156,3 +156,4 @@ def timezone_setting(db: Session) -> str:
 
 def setup_complete(db: Session) -> bool:
     return _get_bool(db, "setup_complete", False)
+
