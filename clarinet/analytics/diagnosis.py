@@ -1,16 +1,19 @@
 """
-clarinet/analytics/diagnosis.py
-Slowdown diagnosis engine — implements the decision tree from Diagram 8.
+clarinet/analytics/diagnosis.py  (M3 rewrite)
+Slowdown diagnosis engine.
 
-Causes (in evaluation order):
-  1. ONE_DEVICE_HEAVY    – one device using >50% of link capacity
-  2. COLLECTIVE_CONGESTION – top-4 devices together >90%, none >50%
-  3. WEAK_WIFI           – device RSSI < -75 dBm AND retry rate > 20%
-  4. PROVIDER_ISSUE      – router latency normal, internet latency > 3× baseline
-  5. LOCAL_CONGESTION    – router latency > 2× baseline, internet load < 20%
-  6. SLOW_DNS            – DNS > 500 ms, ICMP to internet < 100 ms
-  7. NO_CLEAR_CAUSE      – none of the above matched
+Fixes (F-09):
+(a) Event opens only after 2+ consecutive bad samples (≥ 2 min hold)
+(b) Thresholds per SRS: latency > 2× baseline, loss > 3%, speed < 50% plan
+(c) Outage (packet_loss=100%, latency≫) classified as OUTAGE (CRITICAL),
+    slowdown stays WARNING — not CRITICAL
+(d) Per-device share from device_load.py (M2/M1 adapter, not one UsageRecord hour)
+(e) DNS stored async via dns_timer (never blocks the 60 s check)
+(f) Causes labelled "likely"/"possible" with evidence and suggestions
+(g) "Several devices" collective-congestion rule correctly evaluated
+(h) check_slowdown() returns early gracefully if no ping data yet
 """
+from __future__ import annotations
 
 import json
 import logging
@@ -22,62 +25,109 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("clarinet.analytics.diagnosis")
 
-HEAVY_DEVICE_THRESHOLD = 0.50      # >50% of link → ONE_DEVICE_HEAVY
-COLLECTIVE_THRESHOLD = 0.90        # top-4 together >90%
-RSSI_THRESHOLD = -75               # dBm
+# SRS thresholds
+LATENCY_MULTIPLIER_DEFAULT = 2.0      # > 2× baseline avg (SRS, F-09b)
+LOSS_THRESHOLD = 0.03                  # > 3% packet loss (SRS, F-09b)
+SPEED_THRESHOLD = 0.50                 # < 50% of plan = likely cause (SRS, F-09b)
+HEAVY_DEVICE_SHARE = 0.50             # one device > 50% of total
+COLLECTIVE_SHARE = 0.90               # top-4 devices > 90% collectively
+RSSI_THRESHOLD_DBM = -75              # weak Wi-Fi
 DNS_SLOW_MS = 500.0
-ICMP_FAST_MS = 100.0
+
+# Minimum consecutive bad samples before opening an event (F-09a)
+MIN_BAD_SAMPLES = 2
+
+# Module-level counter of consecutive bad samples (reset on "good" sample)
+_consecutive_bad: int = 0
 
 
 def check_slowdown(ping_results: "dict[str, PingResult]") -> None:
     """
     Called every 60 seconds with fresh ping results.
-    Decides whether a slowdown event should be opened or closed.
+    Opens / extends / closes SlowdownEvent rows.
+    Never raises; catches all exceptions internally.
     """
+    global _consecutive_bad
+
+    try:
+        _check_slowdown_inner(ping_results)
+    except Exception as exc:
+        log.error("check_slowdown error: %s", exc)
+
+
+def _check_slowdown_inner(ping_results: "dict[str, PingResult]") -> None:
+    global _consecutive_bad
+
     from clarinet.database import SessionLocal
-    from clarinet.models import SlowdownEvent, Settings as AppSettings
-    from clarinet.analytics.baseline import get_baseline_for_now, latency_is_elevated
-    from clarinet.collector.dns_timer import measure_dns, average_dns_ms
+    from clarinet.models import SlowdownEvent
+    from clarinet.app_settings import get_setting
+    from clarinet.analytics.baseline import (
+        get_baseline_for_now, latency_is_elevated, is_baseline_ready
+    )
 
     internet_ping = ping_results.get("google_dns") or ping_results.get("cloudflare")
     router_ping = ping_results.get("router")
 
     if internet_ping is None:
-        return   # no data yet
+        log.debug("check_slowdown: no internet ping data yet")
+        return
 
     with SessionLocal() as db:
+        if not is_baseline_ready(db):
+            log.debug("check_slowdown: baseline not ready yet")
+            return
+
         baseline = get_baseline_for_now(db)
-        thresh_row = db.get(AppSettings, "slowdown_latency_multiplier")
-        multiplier = float(thresh_row.value) if thresh_row else 3.0
+        multiplier = float(get_setting(db, "slowdown_latency_multiplier", str(LATENCY_MULTIPLIER_DEFAULT)))
 
-        internet_latency_ms = internet_ping.avg_ms or 9999.0
-        router_latency_ms = (router_ping.avg_ms or 0) if router_ping else 0.0
+        internet_ms = internet_ping.avg_ms or 9999.0
+        internet_loss = internet_ping.packet_loss
 
-        is_slow = (
-            latency_is_elevated(internet_latency_ms, baseline, multiplier)
-            or internet_ping.packet_loss > 0.10
+        # Classify: outage vs slowdown
+        is_outage = (
+            not internet_ping.reachable
+            or internet_loss >= 0.98
+        )
+        is_slow = is_outage or (
+            latency_is_elevated(internet_ms, baseline, multiplier)
+            or internet_loss > LOSS_THRESHOLD
+            or _speed_below_plan_check(db)
         )
 
-        # Close any active event if things are back to normal
+        # ── Close active event if now fine ──────────────────────────────
         active = (
             db.query(SlowdownEvent)
-            .filter(SlowdownEvent.ended_at == None)
+            .filter(SlowdownEvent.ended_at.is_(None))
             .first()
         )
+
         if not is_slow:
+            _consecutive_bad = 0
             if active:
                 active.ended_at = datetime.now(timezone.utc)
                 db.commit()
-                log.info("Slowdown event %d ended", active.event_id)
+                log.info("Slowdown/outage event %d ended", active.event_id)
             return
 
-        # Already tracking a slowdown — don't open another
+        # ── Bad sample counter (F-09a) ───────────────────────────────────
+        _consecutive_bad += 1
+        if _consecutive_bad < MIN_BAD_SAMPLES:
+            log.debug(
+                "check_slowdown: bad sample %d/%d — holding before opening event",
+                _consecutive_bad, MIN_BAD_SAMPLES,
+            )
+            return
+
+        # Already tracking this event
         if active:
             return
 
-        # New slowdown — run diagnosis
-        log.info("Slowdown detected — running diagnosis")
-        causes, raw = _diagnose(db, internet_latency_ms, router_latency_ms, baseline, multiplier)
+        # ── Open a new event ────────────────────────────────────────────
+        log.info("Slowdown/outage detected — running diagnosis")
+        causes, raw = _diagnose(db, internet_ms, router_ping, baseline, multiplier, is_outage)
+
+        event_kind = "OUTAGE" if is_outage else "SLOWDOWN"
+        level = "CRITICAL" if is_outage else "WARNING"   # F-09c fix
 
         event = SlowdownEvent(
             started_at=datetime.now(timezone.utc),
@@ -85,140 +135,225 @@ def check_slowdown(ping_results: "dict[str, PingResult]") -> None:
             raw_metrics_json=json.dumps(raw),
         )
         db.add(event)
+        db.flush()
 
-        # Raise a CRITICAL alert
-        from clarinet.models import Alert
+        # Alert text: plain language, no jargon
         top_cause = causes[0]["cause"] if causes else "NO_CLEAR_CAUSE"
-        alert = Alert(
-            level="CRITICAL",
-            type="SLOWDOWN",
-            title=f"Internet slowdown detected — {top_cause.replace('_', ' ').title()}",
-            message=_format_message(causes, raw),
-        )
-        db.add(alert)
+        title, message = _format_alert(event_kind, causes, raw)
+
+        _raise_alert(db, level, event_kind, title, message)
         db.commit()
-
-        from clarinet.routers.ws import broadcast_alert_sync
-        broadcast_alert_sync({
-            "type": "SLOWDOWN",
-            "level": "CRITICAL",
-            "title": alert.title,
-            "message": alert.message,
-        })
-        log.info("Slowdown event opened: %s", top_cause)
+        log.info("Event opened: %s (%s)", event_kind, top_cause)
 
 
-def _diagnose(db, internet_ms: float, router_ms: float, baseline, multiplier: float):
-    """
-    Run the diagnosis decision tree (Diagram 8).
-    Returns (causes_list, raw_metrics_dict).
-    """
-    from clarinet.models import UsageRecord, Device
-    from clarinet.collector.dns_timer import measure_dns, average_dns_ms
-    from datetime import date
-    import pandas as pd
-
-    causes = []
-    today = date.today().isoformat()
-    now_hour = datetime.now(timezone.utc).hour
-
-    # Collect traffic share data
-    records = (
-        db.query(
-            Device.device_id,
-            Device.mac_address,
-            Device.label,
-            UsageRecord.bytes_in,
-            UsageRecord.bytes_out,
+def _speed_below_plan_check(db) -> bool:
+    """Check if the latest speed test result is below 50% of plan."""
+    try:
+        from clarinet.models import SpeedTestResult
+        from clarinet.app_settings import get_setting
+        plan_dl = float(get_setting(db, "plan_download_mbps", "0") or 0)
+        if plan_dl <= 0:
+            return False
+        latest = (
+            db.query(SpeedTestResult)
+            .order_by(SpeedTestResult.tested_at.desc())
+            .first()
         )
-        .join(UsageRecord, Device.device_id == UsageRecord.device_id)
-        .filter(UsageRecord.date == today, UsageRecord.hour == now_hour)
-        .all()
-    )
+        if latest and not latest.busy:
+            return latest.download_mbps < plan_dl * SPEED_THRESHOLD
+    except Exception:
+        pass
+    return False
 
-    total_bytes = sum((r.bytes_in or 0) + (r.bytes_out or 0) for r in records)
 
-    raw = {
-        "internet_latency_ms": internet_ms,
-        "router_latency_ms": router_ms,
-        "total_bytes_this_hour": total_bytes,
-        "baseline_latency_ms": baseline.avg_latency_ms if baseline else None,
+def _diagnose(
+    db, internet_ms: float, router_ping, baseline, multiplier: float, is_outage: bool
+) -> tuple[list[dict], dict]:
+    """
+    Run the diagnosis decision tree.
+    Returns (causes_list, raw_metrics_dict).
+    Each cause: {cause, confidence: likely|possible, evidence, suggestion}
+    """
+    from clarinet.analytics.device_load import get_device_bytes, total_bytes
+    from clarinet.analytics.baseline import latency_is_elevated
+
+    router_ms = (router_ping.avg_ms or 0) if router_ping else 0.0
+    causes = []
+    raw: dict = {
+        "internet_ms": internet_ms,
+        "router_ms": router_ms,
+        "is_outage": is_outage,
     }
 
-    # Check 1: ONE_DEVICE_HEAVY
-    if total_bytes > 0:
-        for r in records:
-            share = ((r.bytes_in or 0) + (r.bytes_out or 0)) / total_bytes
-            if share > HEAVY_DEVICE_THRESHOLD:
-                name = r.label or r.mac_address
+    # ── 1. Outage ──────────────────────────────────────────────────────
+    if is_outage:
+        causes.append({
+            "cause": "INTERNET_OUTAGE",
+            "confidence": "likely",
+            "evidence": "Your internet connection is not responding to pings.",
+            "suggestion": "Check if your router is online. Try restarting it.",
+        })
+        return causes, raw
+
+    # ── 2. One device using > 50% of bandwidth ──────────────────────────
+    device_bytes = get_device_bytes(window_s=60)
+    total = sum(i + o for i, o in device_bytes.values())
+    raw["total_bytes_60s"] = total
+    raw["device_count"] = len(device_bytes)
+
+    if total > 0:
+        sorted_devices = sorted(device_bytes.items(), key=lambda kv: kv[1][0] + kv[1][1], reverse=True)
+        top_mac, (top_in, top_out) = sorted_devices[0]
+        top_share = (top_in + top_out) / total
+
+        if top_share > HEAVY_DEVICE_SHARE:
+            device_name = _device_name(db, top_mac)
+            causes.append({
+                "cause": "ONE_DEVICE_HEAVY",
+                "confidence": "likely",
+                "evidence": f"{device_name} is using {top_share*100:.0f}% of your network.",
+                "suggestion": f"Pause downloads or streaming on {device_name}.",
+                "device_mac": top_mac,
+            })
+
+        # ── 3. Collective congestion (top-4 devices > 90%) ──────────────
+        elif len(sorted_devices) >= 2:
+            top4 = sorted_devices[:4]
+            collective = sum(i + o for _, (i, o) in top4) / total
+            if collective > COLLECTIVE_SHARE:
+                names = ", ".join(_device_name(db, m) for m, _ in top4[:3])
                 causes.append({
-                    "cause": "ONE_DEVICE_HEAVY",
-                    "confidence": "HIGH",
-                    "detail": f"{name} used {share*100:.0f}% of hourly traffic.",
+                    "cause": "COLLECTIVE_CONGESTION",
+                    "confidence": "likely",
+                    "evidence": f"Several devices ({names}…) together use {collective*100:.0f}% of your network.",
+                    "suggestion": "Reduce simultaneous heavy use across multiple devices.",
                 })
-                break
+            raw["top4_share"] = round(collective, 3)
 
-    # Check 2: COLLECTIVE_CONGESTION
-    if not causes and total_bytes > 0:
-        sorted_records = sorted(records, key=lambda r: (r.bytes_in or 0) + (r.bytes_out or 0), reverse=True)
-        top4_bytes = sum((r.bytes_in or 0) + (r.bytes_out or 0) for r in sorted_records[:4])
-        if top4_bytes / total_bytes > COLLECTIVE_THRESHOLD:
-            causes.append({
-                "cause": "COLLECTIVE_CONGESTION",
-                "confidence": "MEDIUM",
-                "detail": f"Top 4 devices used {top4_bytes/total_bytes*100:.0f}% of hourly traffic collectively.",
-            })
+    # ── 4. Provider issue: router OK, internet slow ──────────────────────
+    router_elevated = (
+        router_ping is not None
+        and router_ping.reachable
+        and latency_is_elevated(router_ms, baseline, multiplier)
+    )
+    internet_elevated = latency_is_elevated(internet_ms, baseline, multiplier)
 
-    # Check 3: PROVIDER_ISSUE (internet latency >> baseline, router OK)
-    if not causes and baseline and baseline.avg_latency_ms:
-        router_baseline = baseline.avg_latency_ms * 0.3   # rough router share
-        if router_ms < router_baseline * 2 and internet_ms > baseline.avg_latency_ms * multiplier:
-            causes.append({
-                "cause": "PROVIDER_ISSUE",
-                "confidence": "HIGH",
-                "detail": (
-                    f"Internet latency {internet_ms:.0f} ms is {internet_ms/baseline.avg_latency_ms:.1f}× "
-                    f"normal ({baseline.avg_latency_ms:.0f} ms). Router latency normal."
-                ),
-            })
+    if internet_elevated and not router_elevated:
+        causes.append({
+            "cause": "PROVIDER_ISSUE",
+            "confidence": "likely" if not causes else "possible",
+            "evidence": (
+                f"Your router responds in {router_ms:.0f} ms (normal), "
+                f"but the internet takes {internet_ms:.0f} ms (high)."
+            ),
+            "suggestion": "This is likely your internet provider. Wait and check again in 30 minutes.",
+        })
 
-    # Check 4: LOCAL_CONGESTION (router latency high, low internet load)
-    if not causes and baseline and baseline.avg_latency_ms and router_ms > 0:
-        if router_ms > baseline.avg_latency_ms * 2 and total_bytes < 1_000_000:
-            causes.append({
-                "cause": "LOCAL_CONGESTION",
-                "confidence": "MEDIUM",
-                "detail": f"Router latency {router_ms:.0f} ms elevated with low traffic.",
-            })
+    # ── 5. Local congestion: router slow, internet load low ─────────────
+    elif router_elevated and total < 5_000_000:   # < 5 MB/min = low load
+        causes.append({
+            "cause": "LOCAL_CONGESTION",
+            "confidence": "possible",
+            "evidence": f"Your router is slow ({router_ms:.0f} ms). Internet load is low.",
+            "suggestion": "Restart your router. Check for devices doing background updates.",
+        })
 
-    # Check 5: SLOW_DNS
-    if not causes:
-        dns_results = measure_dns()
-        avg_dns = average_dns_ms(dns_results)
-        raw["dns_avg_ms"] = avg_dns
-        if avg_dns and avg_dns > DNS_SLOW_MS and internet_ms < ICMP_FAST_MS:
-            causes.append({
-                "cause": "SLOW_DNS",
-                "confidence": "HIGH",
-                "detail": f"DNS resolution averaging {avg_dns:.0f} ms (threshold: {DNS_SLOW_MS:.0f} ms).",
-            })
+    # ── 6. Slow DNS ─────────────────────────────────────────────────────
+    dns_ms = _get_last_dns_ms(db)
+    raw["dns_ms"] = dns_ms
+    if dns_ms and dns_ms > DNS_SLOW_MS and internet_ms < 100:
+        causes.append({
+            "cause": "SLOW_DNS",
+            "confidence": "possible",
+            "evidence": f"DNS lookups are taking {dns_ms:.0f} ms (should be under 100 ms).",
+            "suggestion": "Try changing your DNS to 1.1.1.1 or 8.8.8.8 in your router settings.",
+        })
 
-    # Fallback
+    # ── 7. No clear cause ───────────────────────────────────────────────
     if not causes:
         causes.append({
             "cause": "NO_CLEAR_CAUSE",
-            "confidence": "LOW",
-            "detail": "No specific cause identified. Raw metrics recorded.",
+            "confidence": "possible",
+            "evidence": "The network is slow but no single cause was found.",
+            "suggestion": "Restart your router and wait a few minutes.",
         })
 
     return causes, raw
 
 
-def _format_message(causes: list[dict], raw: dict) -> str:
-    lines = []
-    for c in causes:
-        label = c["cause"].replace("_", " ").title()
-        lines.append(f"[{c['confidence']}] {label}: {c['detail']}")
-    if raw.get("internet_latency_ms"):
-        lines.append(f"Internet latency: {raw['internet_latency_ms']:.0f} ms")
-    return " | ".join(lines)
+def _device_name(db, mac: str) -> str:
+    """Look up a device's label or vendor for human-readable output."""
+    try:
+        from clarinet.models import Device
+        dev = db.query(Device).filter(Device.mac_address == mac).first()
+        if dev:
+            return dev.label or dev.vendor or mac
+    except Exception:
+        pass
+    return mac
+
+
+def _get_last_dns_ms(db) -> float | None:
+    """Return the last stored DNS latency measurement."""
+    try:
+        from clarinet.collector.dns_timer import average_dns_ms, measure_dns
+        # Use cached results if available (dns_timer stores them)
+        from clarinet.collector import dns_timer as _dt
+        if hasattr(_dt, "_last_results") and _dt._last_results:
+            return average_dns_ms(_dt._last_results)
+    except Exception:
+        pass
+    return None
+
+
+def _format_alert(event_kind: str, causes: list[dict], raw: dict) -> tuple[str, str]:
+    """Format plain-language alert title and message (DASH-4)."""
+    top = causes[0] if causes else {}
+    cause_name = top.get("cause", "NO_CLEAR_CAUSE")
+    evidence = top.get("evidence", "")
+    suggestion = top.get("suggestion", "")
+
+    if event_kind == "INTERNET_OUTAGE":
+        title = "Your internet connection seems to be down"
+    elif cause_name == "ONE_DEVICE_HEAVY":
+        title = "One device is slowing down the network"
+    elif cause_name == "COLLECTIVE_CONGESTION":
+        title = "Several devices are slowing down the network"
+    elif cause_name == "PROVIDER_ISSUE":
+        title = "Your internet provider may be having issues"
+    elif cause_name == "LOCAL_CONGESTION":
+        title = "Your router seems congested"
+    elif cause_name == "SLOW_DNS":
+        title = "Website lookups are unusually slow"
+    else:
+        title = "Your internet is slower than usual"
+
+    message = evidence
+    if suggestion:
+        message += f" {suggestion}"
+    if len(causes) > 1:
+        others = ", ".join(c["cause"].replace("_", " ").title() for c in causes[1:3])
+        message += f" (Other possible factors: {others}.)"
+
+    return title, message
+
+
+def _raise_alert(db, level: str, alert_type: str, title: str, message: str) -> None:
+    """Create a slowdown/outage alert, using M1's helper if available."""
+    try:
+        from clarinet.core_svc.alerts import raise_alert
+        raise_alert(db, level, alert_type, title, message, cooldown_s=300)
+        return
+    except ImportError:
+        pass
+    except Exception as exc:
+        log.error("raise_alert failed: %s", exc)
+
+    # Fallback
+    try:
+        from clarinet.models import Alert
+        existing = db.query(Alert).filter(Alert.type == alert_type, Alert.status == "OPEN").first()
+        if not existing:
+            db.add(Alert(level=level, type=alert_type, title=title, message=message))
+    except Exception as exc:
+        log.error("Alert fallback failed: %s", exc)
