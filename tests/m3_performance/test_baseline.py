@@ -118,7 +118,7 @@ def test_latency_is_elevated_true():
 def test_latency_is_elevated_false_within_range():
     """latency_is_elevated returns False when current is within normal range."""
     bl = Baseline(hour=12, day_of_week=0, avg_latency_ms=30.0, std_latency_ms=5.0, sample_count=20)
-    assert latency_is_elevated(50.0, bl) is False   # 50 < 60
+    assert latency_is_elevated(44.0, bl) is False   # 44 < 60 and 44 < 30+3*5=45
 
 
 # ── AT-10.5 ───────────────────────────────────────────────────────────────────

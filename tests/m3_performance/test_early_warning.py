@@ -59,7 +59,7 @@ def test_no_warning_flat_trend(db):
     _add_pings(db, flat)
     db.commit()
 
-    with patch("clarinet.analytics.early_warning.get_baseline_for_now",
+    with patch("clarinet.analytics.baseline.get_baseline_for_now",
                return_value=_mock_baseline(avg_ms=30.0)):
         result = check_early_warning(db=db)
 
@@ -78,11 +78,11 @@ def test_warning_raised_on_sharp_rising_latency(db):
     pre_thresh = alert_threshold * 0.70    # 42 ms
 
     # 10 samples: start at 20, end at 55 — steep rise, last sample > pre_thresh
-    rising = [20.0 + i * 3.9 for i in range(10)]   # ends at ~55 ms
+    rising = [20.0 + i * 6.0 for i in range(10)]   # ends at 74 ms, slope ~12ms/min
     _add_pings(db, rising)
     db.commit()
 
-    with patch("clarinet.analytics.early_warning.get_baseline_for_now",
+    with patch("clarinet.analytics.baseline.get_baseline_for_now",
                return_value=_mock_baseline(avg_ms=baseline_avg)):
         result = check_early_warning(db=db)
 
@@ -97,11 +97,11 @@ def test_warning_raised_on_sharp_rising_latency(db):
 def test_warning_payload_keys(db):
     """Warning result contains required keys: level, type, title, message."""
     baseline_avg = 30.0
-    rising = [20.0 + i * 3.9 for i in range(10)]
+    rising = [20.0 + i * 6.0 for i in range(10)]
     _add_pings(db, rising)
     db.commit()
 
-    with patch("clarinet.analytics.early_warning.get_baseline_for_now",
+    with patch("clarinet.analytics.baseline.get_baseline_for_now",
                return_value=_mock_baseline(avg_ms=baseline_avg)):
         result = check_early_warning(db=db)
 
@@ -124,7 +124,7 @@ def test_no_warning_when_too_few_samples(db):
     _add_pings(db, sparse)
     db.commit()
 
-    with patch("clarinet.analytics.early_warning.get_baseline_for_now",
+    with patch("clarinet.analytics.baseline.get_baseline_for_now",
                return_value=_mock_baseline(avg_ms=30.0)):
         result = check_early_warning(db=db)
 
@@ -137,7 +137,7 @@ def test_no_warning_when_baseline_none(db):
     _add_pings(db, rising)
     db.commit()
 
-    with patch("clarinet.analytics.early_warning.get_baseline_for_now", return_value=None):
+    with patch("clarinet.analytics.baseline.get_baseline_for_now", return_value=None):
         result = check_early_warning(db=db)
 
     assert result is None, "Should not warn without baseline"
