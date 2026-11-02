@@ -1,0 +1,54 @@
+{% extends "base_app.html" %}
+{% block title %}System Status — Clarinet{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>System Status</h1>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <div class="card-header">Network</div>
+      <div class="card-body">
+        <dl class="row">
+          <dt class="col-sm-4">Mode</dt>
+          <dd class="col-sm-8"><span class="badge {% if mode == 'FULL' %}bg-success{% elif mode == 'MONITOR' %}bg-warning{% else %}bg-secondary{% endif %}">{{ mode_word }}</span></dd>
+          <dt class="col-sm-4">Network</dt>
+          <dd class="col-sm-8">{{ network_word }}</dd>
+          <dt class="col-sm-4">Interface</dt>
+          <dd class="col-sm-8"><code>{{ iface }}</code></dd>
+          <dt class="col-sm-4">Router IP</dt>
+          <dd class="col-sm-8"><code>{{ router_ip }}</code></dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card">
+      <div class="card-header">Devices</div>
+      <div class="card-body">
+        <dl class="row">
+          <dt class="col-sm-6">Total</dt><dd class="col-sm-6">{{ total_devices }}</dd>
+          <dt class="col-sm-6">Online (Approved)</dt><dd class="col-sm-6">{{ online_devices }}</dd>
+          <dt class="col-sm-6">Awaiting Approval</dt><dd class="col-sm-6">{{ new_devices }}</dd>
+          <dt class="col-sm-6">Open Alerts</dt><dd class="col-sm-6">{{ open_alerts }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if limit %}
+<div class="card mt-3">
+  <div class="card-header">Data Limit</div>
+  <div class="card-body">
+    <p>Period: {{ limit.period_start }} → {{ limit.period_end }} ({{ limit.days_remaining }} day(s) remaining)</p>
+    <p>Used: {{ limit.gb_used }} GB
+      {% if limit.bytes_limit %} / {{ "%.1f"|format(limit.bytes_limit / 1073741824) }} GB ({{ "%.0f"|format((limit.pct_used or 0)*100) }}%){% endif %}
+    </p>
+    <span class="badge {% if limit.status == 'OVER' %}bg-danger{% elif limit.status == 'WARN' %}bg-warning{% elif limit.status == 'UNDER' %}bg-success{% else %}bg-secondary{% endif %}">{{ limit.status }}</span>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+

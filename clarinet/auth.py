@@ -4,24 +4,35 @@ Session helpers for HttpOnly signed-cookie sessions.
 
 Policy:
   - Session expires after 30 minutes of idle (ACC-01)
-  - Every login failure is written to AuditLog (ACC-09)
+  - Login lockout: 5 failures → locked 5 min (ACC-02)
+  - Per-IP lockout: 5 failures from same IP in 5 min → lock (ACC-02b)
+  - Every login attempt is written to LoginAttempt table
   - bcrypt for password hashing (NFR-14)
-  - No login attempt limit — unlimited retries allowed
+  - Generic error messages prevent username enumeration (ACC-03)
+  - Session fixation fix: session cleared before login (ACC-04)
+
+M1 OWNS THIS FILE — do not edit in other branches.
 """
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from clarinet.config import settings
 from clarinet.models import AuditLog, Member
 
-# bcrypt context
+# bcrypt context — lazy import via passlib
+from passlib.context import CryptContext
+
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Lockout constants
+_MAX_ATTEMPTS = 5
+_LOCKOUT_MINUTES = 5
+_IP_WINDOW_SECONDS = 300  # 5 minutes
 
 
 def hash_password(plain: str) -> str:
@@ -32,9 +43,9 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_ctx.verify(plain, hashed)
 
 
-# Session read/write
+# ─── Session read/write ────────────────────────────────────────────────────────
 
-def get_session_user(request: Request, db: Session) -> Member | None:
+def get_session_user(request: Request, db: Session) -> "Member | None":
     """
     Return the authenticated Member from the signed session cookie,
     or None if the session is missing, expired, or the user no longer exists.
@@ -61,8 +72,8 @@ def get_session_user(request: Request, db: Session) -> Member | None:
     return user
 
 
-def login_user(request: Request, user: Member) -> None:
-    """Stamp the session after a successful login."""
+def login_user(request: Request, user: "Member") -> None:
+    """Stamp the session after a successful login (session fixation fix: clear first)."""
     request.session.clear()
     request.session["user_id"] = user.member_id
     request.session["username"] = user.username
@@ -74,53 +85,145 @@ def logout_user(request: Request) -> None:
     request.session.clear()
 
 
-# Login attempt logic
+# ─── Login attempt logic ───────────────────────────────────────────────────────
+
+def _get_client_ip(request: Request) -> str:
+    """Extract real client IP, honouring X-Forwarded-For if set."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _count_recent_ip_failures(db: Session, ip: str, window_s: int = _IP_WINDOW_SECONDS) -> int:
+    """Count failed login attempts from `ip` in the last `window_s` seconds."""
+    try:
+        from clarinet.models.reports import LoginAttempt
+        cutoff = datetime.utcnow() - timedelta(seconds=window_s)
+        return (
+            db.query(LoginAttempt)
+            .filter(
+                LoginAttempt.ip_address == ip,
+                LoginAttempt.success == False,
+                LoginAttempt.attempted_at >= cutoff,
+            )
+            .count()
+        )
+    except Exception:
+        return 0
+
+
+def _write_login_attempt(
+    db: Session,
+    ip: str,
+    username: str,
+    success: bool,
+    member_id: int | None = None,
+) -> None:
+    """Record a login attempt (best-effort; never raises)."""
+    try:
+        from clarinet.models.reports import LoginAttempt
+        db.add(LoginAttempt(
+            ip_address=ip,
+            username=username,
+            member_id=member_id,
+            success=success,
+            attempted_at=datetime.utcnow(),
+        ))
+    except Exception:
+        pass  # table may not exist yet in early migrations
+
 
 def attempt_login(
     request: Request,
     db: Session,
     username: str,
     password: str,
-) -> tuple[Member | None, str | None]:
+) -> "tuple[Member | None, str | None]":
     """
     Try to authenticate a user.
 
     Returns (user, None) on success, or (None, error_message) on failure.
-    No lockout or attempt limits — any number of tries is allowed.
+    Enforces per-user AND per-IP lockout after 5 failures.
+    All error messages are generic to prevent username enumeration.
     """
+    ip = _get_client_ip(request)
+    generic_error = "Invalid username or password."
+    locked_error_template = (
+        "This account is temporarily locked. Try again in {mins} minute(s)."
+    )
+
+    # ── Per-IP lockout check (even before DB lookup) ──────────────────────────
+    if _count_recent_ip_failures(db, ip) >= _MAX_ATTEMPTS:
+        _write_login_attempt(db, ip, username, False)
+        _audit(db, None, "LOGIN_BLOCKED", detail={"username": username, "reason": "ip_lockout", "ip": ip})
+        db.commit()
+        return None, generic_error  # don't reveal IP lockout to attacker
+
+    # ── Look up user ──────────────────────────────────────────────────────────
     user = db.query(Member).filter(Member.username == username).first()
 
-    # Unknown user — don't reveal whether username exists
     if user is None:
+        _write_login_attempt(db, ip, username, False)
         _audit(db, None, "LOGIN_FAIL", detail={"username": username, "reason": "unknown_user"})
         db.commit()
-        return None, "Invalid username or password."
+        return None, generic_error
 
-    # Account not active
     if not user.is_active:
+        _write_login_attempt(db, ip, username, False, user.member_id)
         _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "account_inactive"})
         db.commit()
-        return None, "Your account has been disabled. Contact the administrator."
+        # Generic: don't reveal "account disabled" to attackers
+        return None, generic_error
 
-    # Password check — no attempt limit
+    # ── Per-user lockout check ────────────────────────────────────────────────
+    now_utc = datetime.now(timezone.utc)
+    if user.locked_until is not None:
+        locked_until = user.locked_until
+        # Make timezone-aware for comparison
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if now_utc < locked_until:
+            remaining_s = (locked_until - now_utc).total_seconds()
+            remaining_min = max(1, int(remaining_s // 60) + 1)
+            _write_login_attempt(db, ip, username, False, user.member_id)
+            _audit(db, user.member_id, "LOGIN_BLOCKED", detail={"reason": "user_lockout"})
+            db.commit()
+            return None, locked_error_template.format(mins=remaining_min)
+        else:
+            # Lockout expired — clear it
+            user.locked_until = None
+            user.failed_attempts = 0
+
+    # ── Password check ────────────────────────────────────────────────────────
     if not verify_password(password, user.password_hash):
-        _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password"})
-        db.commit()
-        return None, "Invalid username or password."
+        user.failed_attempts = (user.failed_attempts or 0) + 1
+        if user.failed_attempts >= _MAX_ATTEMPTS:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_MINUTES)
+            user.failed_attempts = 0
+            _write_login_attempt(db, ip, username, False, user.member_id)
+            _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password_lockout"})
+            db.commit()
+            return None, generic_error
+        else:
+            _write_login_attempt(db, ip, username, False, user.member_id)
+            _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password", "attempts": user.failed_attempts})
+            db.commit()
+            return None, generic_error
 
-    # Success
+    # ── Success ───────────────────────────────────────────────────────────────
     user.failed_attempts = 0
     user.locked_until = None
-    db.commit()
-    _audit(db, user.member_id, "LOGIN_OK")
+    _write_login_attempt(db, ip, username, True, user.member_id)
+    _audit(db, user.member_id, "LOGIN_OK", detail={"ip": ip})
     db.commit()
     login_user(request, user)
     return user, None
 
 
-# Redirect helpers
+# ─── Redirect helpers ──────────────────────────────────────────────────────────
 
-def require_login(request: Request, db: Session) -> Member | RedirectResponse:
+def require_login(request: Request, db: Session) -> "Member | RedirectResponse":
     """
     Return the current Member or a RedirectResponse to /login.
     Usage:
@@ -135,7 +238,7 @@ def require_login(request: Request, db: Session) -> Member | RedirectResponse:
     return user
 
 
-def require_admin(request: Request, db: Session) -> Member | RedirectResponse:
+def require_admin(request: Request, db: Session) -> "Member | RedirectResponse":
     """Same as require_login but also enforces the ADMIN role."""
     result = require_login(request, db)
     if isinstance(result, RedirectResponse):
@@ -145,15 +248,15 @@ def require_admin(request: Request, db: Session) -> Member | RedirectResponse:
     return result
 
 
-# Audit helper
+# ─── Audit helper ─────────────────────────────────────────────────────────────
 
 def _audit(
     db: Session,
-    actor_id: int | None,
+    actor_id: "int | None",
     action: str,
-    target_type: str | None = None,
-    target_id: str | None = None,
-    detail: dict | None = None,
+    target_type: "str | None" = None,
+    target_id: "str | None" = None,
+    detail: "dict | None" = None,
 ) -> None:
     import json
     log = AuditLog(
@@ -169,11 +272,11 @@ def _audit(
 
 def audit(
     db: Session,
-    actor_id: int | None,
+    actor_id: "int | None",
     action: str,
-    target_type: str | None = None,
+    target_type: "str | None" = None,
     target_id=None,
-    detail: dict | None = None,
+    detail: "dict | None" = None,
     commit: bool = True,
 ) -> None:
     """Public version — commits by default."""

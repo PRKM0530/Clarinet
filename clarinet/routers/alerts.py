@@ -1,66 +1,133 @@
-"""clarinet/routers/alerts.py"""
+"""
+clarinet/routers/alerts.py
+Alert management routes for M1.
+
+Routes:
+  GET  /alerts                  — alert list with filters/pagination
+  POST /alerts/{id}/ack         — acknowledge an alert
+  POST /alerts/{id}/resolve     — resolve an alert
+  GET  /api/devices/summary     — C-07: device counts summary
+"""
+
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from clarinet import templates
-from clarinet.auth import require_admin, audit
+from clarinet.auth import require_admin, require_login
 from clarinet.database import get_db
-from clarinet.models import Alert
 
-router = APIRouter(prefix="/alerts", tags=["alerts"])
+router = APIRouter(tags=["alerts"])
 
 
-@router.get("", response_class=HTMLResponse)
-def alert_list(request: Request, db: Session = Depends(get_db)):
-    result = require_admin(request, db)
+@router.get("/alerts", response_class=HTMLResponse)
+def alerts_page(request: Request, db: Session = Depends(get_db)):
+    result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
 
+    # Filters
+    level_filter = request.query_params.get("level", "")
+    status_filter = request.query_params.get("status", "OPEN")
+    page = max(1, int(request.query_params.get("page", "1")))
+    per_page = 20
+
+    from clarinet.models import Alert
+    q = db.query(Alert)
+    if level_filter:
+        q = q.filter(Alert.level == level_filter.upper())
+    if status_filter:
+        q = q.filter(Alert.status == status_filter.upper())
+
+    total = q.count()
     alerts = (
-        db.query(Alert)
-        .order_by(Alert.raised_at.desc())
-        .limit(200)
+        q.order_by(Alert.raised_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
         .all()
     )
-    open_count = sum(1 for a in alerts if a.status == "OPEN")
-    critical_count = sum(1 for a in alerts if a.level == "CRITICAL" and a.status == "OPEN")
 
     return templates.TemplateResponse("alerts/index.html", {
         "request": request,
         "user": user,
         "page": "alerts",
         "alerts": alerts,
-        "open_count": open_count,
-        "critical_count": critical_count,
+        "total": total,
+        "cur_page": page,
+        "per_page": per_page,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+        "level_filter": level_filter,
+        "status_filter": status_filter,
+        "info": request.query_params.get("info", ""),
+        "error": request.query_params.get("error", ""),
     })
 
 
-@router.post("/{alert_id}/ack")
-def ack_alert(alert_id: int, request: Request, db: Session = Depends(get_db)):
-    result = require_admin(request, db)
+@router.post("/alerts/{alert_id}/ack")
+def ack_alert_route(alert_id: int, request: Request, db: Session = Depends(get_db)):
+    result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
 
-    alert = db.get(Alert, alert_id)
-    if alert:
-        alert.status = "ACK"
+    from clarinet.core_svc.alerts import ack_alert
+    from clarinet.auth import audit
+    ok = ack_alert(db, alert_id, user.member_id)
+    if ok:
         audit(db, user.member_id, "ACK_ALERT", "Alert", alert_id)
-    return RedirectResponse(url="/alerts", status_code=302)
+    return RedirectResponse(
+        url=f"/alerts?info={'acked' if ok else 'not_found'}",
+        status_code=302,
+    )
 
 
-@router.post("/{alert_id}/resolve")
-def resolve_alert(alert_id: int, request: Request, db: Session = Depends(get_db)):
+@router.post("/alerts/{alert_id}/resolve")
+def resolve_alert_route(alert_id: int, request: Request, db: Session = Depends(get_db)):
     result = require_admin(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
 
-    alert = db.get(Alert, alert_id)
-    if alert:
-        alert.status = "RESOLVED"
+    from clarinet.core_svc.alerts import resolve_alert_by_id
+    from clarinet.auth import audit
+    ok = resolve_alert_by_id(db, alert_id)
+    if ok:
         audit(db, user.member_id, "RESOLVE_ALERT", "Alert", alert_id)
-    return RedirectResponse(url="/alerts", status_code=302)
+    return RedirectResponse(
+        url=f"/alerts?info={'resolved' if ok else 'not_found'}",
+        status_code=302,
+    )
+
+
+@router.get("/api/devices/summary")
+def api_devices_summary(request: Request, db: Session = Depends(get_db)):
+    """
+    C-07: Device counts summary.
+    Returns total, approved, new, blocked, guest counts.
+    """
+    from clarinet.auth import get_session_user
+    user = get_session_user(request, db)
+    if user is None:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+
+    from clarinet.models import Device
+    from sqlalchemy import func
+
+    rows = (
+        db.query(Device.state, func.count(Device.device_id))
+        .group_by(Device.state)
+        .all()
+    )
+    counts = {state: count for state, count in rows}
+    total = sum(counts.values())
+
+    return {
+        "total": total,
+        "approved": counts.get("APPROVED", 0),
+        "new": counts.get("NEW", 0),
+        "blocked": counts.get("BLOCKED", 0),
+        "guest": counts.get("GUEST", 0),
+    }
