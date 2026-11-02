@@ -20,9 +20,9 @@ log = logging.getLogger("clarinet.collector.arp_spoof")
 RECENT_MINUTES = 10
 
 
-def check(ip: str, mac: str) -> None:
+def check(ip: str, mac: str, db=None) -> None:
     """Entry point used by the ARP scanner for every sighting."""
-    detect_arp_spoof(ip, mac)
+    detect_arp_spoof(ip, mac, db=db)
 
 
 def detect_arp_spoof(ip: str, mac: str, db=None) -> bool:

@@ -22,6 +22,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from clarinet.collector import arp_spoof
+
 if TYPE_CHECKING:
     from clarinet.core_svc.runner import Runner
 
@@ -187,6 +189,15 @@ def scan_once(db, interface: str, subnet: str | None = None) -> list[dict]:
         if guest_subnet and ip and _ip_in_subnet(ip, guest_subnet):
             log.debug("ARP scan: skipping guest subnet IP %s", ip)
             continue
+
+        # Security: same IP answering with a different MAC (ARP spoofing).
+        # Uses this scan's session so two writers never fight over SQLite, and
+        # must never be able to break device discovery.
+        if ip:
+            try:
+                arp_spoof.check(ip, mac, db=db)
+            except Exception as e:
+                log.warning("ARP spoof check failed for %s: %s", ip, e)
 
         vendor = lookup_vendor(mac)
         random_mac = is_random_mac(mac)

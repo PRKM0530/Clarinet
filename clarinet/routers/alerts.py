@@ -37,6 +37,11 @@ def alerts_page(request: Request, db: Session = Depends(get_db)):
 
     from clarinet.models import Alert
     q = db.query(Alert)
+    if not user.is_admin:
+        # Members only see alerts about their own devices. Network-wide and
+        # security alerts (ARP spoofing, router audit, fake APs) are admin-only.
+        from clarinet.core_svc.permissions import member_device_ids
+        q = q.filter(Alert.device_id.in_(member_device_ids(db, user)))
     if level_filter:
         q = q.filter(Alert.level == level_filter.upper())
     if status_filter:
@@ -75,6 +80,12 @@ def ack_alert_route(alert_id: int, request: Request, db: Session = Depends(get_d
 
     from clarinet.core_svc.alerts import ack_alert
     from clarinet.auth import audit
+    if not user.is_admin:
+        from clarinet.core_svc.permissions import member_device_ids
+        from clarinet.models import Alert
+        alert = db.get(Alert, alert_id)
+        if alert is None or alert.device_id not in member_device_ids(db, user):
+            return RedirectResponse(url="/alerts?info=not_found", status_code=302)
     ok = ack_alert(db, alert_id, user.member_id)
     if ok:
         audit(db, user.member_id, "ACK_ALERT", "Alert", alert_id)
