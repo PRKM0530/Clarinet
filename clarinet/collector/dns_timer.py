@@ -50,6 +50,11 @@ def query_dns(hostname: str, nameserver: str | None = None) -> DnsResult:
                          response_ms=round(elapsed_ms, 1), success=False, error=str(e))
 
 
+
+
+# Cache last results so diagnosis.py can read them without blocking (F-09e)
+_last_results = []
+
 def measure_dns() -> list[DnsResult]:
     """Measure DNS for all configured targets against the system resolver."""
     results = []
@@ -57,6 +62,8 @@ def measure_dns() -> list[DnsResult]:
         r = query_dns(target)
         log.debug("DNS %s: %.1f ms (ok=%s)", target, r.response_ms or 0, r.success)
         results.append(r)
+    global _last_results
+    _last_results = results
     return results
 
 

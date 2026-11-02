@@ -1,27 +1,30 @@
 """
-clarinet/collector/pinger.py
-ICMP latency and packet-loss measurements.
+clarinet/collector/pinger.py  (M3 fix)
+ICMP latency collector — stores PingRecord rows, feeds slowdown detector.
 
-Uses icmplib (needs root on Linux, works on Windows with admin).
-Results feed the baseline and slowdown detection systems.
+Fixes (F-13):
+- PING_TARGETS is not mutated globally; router IP read fresh each call
+- Non-privileged fallback (no root crash on Windows)
+- Cadence 60 s is enforced by the scheduler, not by sleeping here
+- Each call is isolated (no global state mutation)
 """
+from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 log = logging.getLogger("clarinet.collector.pinger")
 
-# Targets to ping for latency measurement
-PING_TARGETS = {
-    "router": None,       # filled at runtime from settings
+PING_COUNT = 4
+PING_INTERVAL = 0.25
+PING_TIMEOUT = 2.0
+
+# Fixed public targets (never mutated)
+_PUBLIC_TARGETS: dict[str, str] = {
     "google_dns": "8.8.8.8",
     "cloudflare": "1.1.1.1",
 }
-
-PING_COUNT = 4
-PING_INTERVAL = 0.2      # seconds between pings
-PING_TIMEOUT = 2.0
 
 
 @dataclass
@@ -31,94 +34,119 @@ class PingResult:
     avg_ms: float | None
     min_ms: float | None
     max_ms: float | None
-    packet_loss: float    # 0.0 – 1.0
+    packet_loss: float   # 0.0–1.0
     reachable: bool
 
 
-def ping_host(host: str, count: int = PING_COUNT) -> PingResult:
+def _get_router_ip(db=None) -> str | None:
+    """Read router IP from settings without mutating any global."""
+    try:
+        if db is not None:
+            from clarinet.app_settings import get_setting
+            ip = get_setting(db, "router_ip", "")
+            return ip if ip else None
+        from clarinet.database import SessionLocal
+        from clarinet.app_settings import get_setting
+        with SessionLocal() as _db:
+            ip = get_setting(_db, "router_ip", "")
+            return ip if ip else None
+    except Exception:
+        return None
+
+
+def ping_host(host: str, target_name: str = "") -> PingResult:
     """
     Ping a single host and return a PingResult.
-    Falls back to a stub on non-Linux or missing icmplib.
+    Tries privileged ICMP first; falls back to unprivileged on failure.
+    Never crashes — returns an unreachable result on any exception.
     """
-    try:
-        from icmplib import ping as icmp_ping
-        result = icmp_ping(host, count=count, interval=PING_INTERVAL, timeout=PING_TIMEOUT, privileged=True)
-        return PingResult(
-            target=host,
-            host=host,
-            avg_ms=round(result.avg_rtt, 2) if result.is_alive else None,
-            min_ms=round(result.min_rtt, 2) if result.is_alive else None,
-            max_ms=round(result.max_rtt, 2) if result.is_alive else None,
-            packet_loss=result.packet_loss,
-            reachable=result.is_alive,
-        )
-    except Exception as e:
-        log.debug("Ping to %s failed: %s", host, e)
-        return PingResult(
-            target=host, host=host,
-            avg_ms=None, min_ms=None, max_ms=None,
-            packet_loss=1.0, reachable=False,
-        )
+    target_name = target_name or host
+    for privileged in (True, False):
+        try:
+            from icmplib import ping as icmp_ping
+            result = icmp_ping(
+                host,
+                count=PING_COUNT,
+                interval=PING_INTERVAL,
+                timeout=PING_TIMEOUT,
+                privileged=privileged,
+            )
+            return PingResult(
+                target=target_name,
+                host=host,
+                avg_ms=round(result.avg_rtt, 2) if result.is_alive else None,
+                min_ms=round(result.min_rtt, 2) if result.is_alive else None,
+                max_ms=round(result.max_rtt, 2) if result.is_alive else None,
+                packet_loss=result.packet_loss,
+                reachable=result.is_alive,
+            )
+        except PermissionError:
+            if not privileged:
+                break
+            continue  # retry unprivileged
+        except Exception as exc:
+            log.debug("Ping %s failed (privileged=%s): %s", host, privileged, exc)
+            break
+
+    return PingResult(
+        target=target_name, host=host,
+        avg_ms=None, min_ms=None, max_ms=None,
+        packet_loss=1.0, reachable=False,
+    )
 
 
-def measure_latency() -> dict[str, PingResult]:
-    """Ping all configured targets and return results keyed by name."""
-    from clarinet.database import SessionLocal
-    from clarinet.models import Settings as AppSettings
+def measure_latency(db=None) -> dict[str, PingResult]:
+    """
+    Ping all configured targets and return results keyed by name.
+    Router IP is read fresh from settings each call (F-13 fix).
+    """
+    targets = dict(_PUBLIC_TARGETS)   # copy, never mutate the original
+
+    router_ip = _get_router_ip(db)
+    if router_ip:
+        targets["router"] = router_ip
 
     results: dict[str, PingResult] = {}
-
-    with SessionLocal() as db:
-        # Get router IP from settings if configured
-        router_row = db.get(AppSettings, "router_ip")
-        if router_row:
-            PING_TARGETS["router"] = router_row.value
-
-    for name, host in PING_TARGETS.items():
-        if host is None:
-            continue
-        results[name] = ping_host(host)
-        log.debug("Ping %s (%s): avg=%.1fms loss=%.0f%%",
-                  name, host,
-                  results[name].avg_ms or 0,
-                  (results[name].packet_loss or 0) * 100)
+    for name, host in targets.items():
+        results[name] = ping_host(host, target_name=name)
+        log.debug(
+            "Ping %s (%s): avg=%s ms loss=%.0f%%",
+            name, host,
+            f"{results[name].avg_ms:.1f}" if results[name].avg_ms is not None else "—",
+            (results[name].packet_loss or 0) * 100,
+        )
 
     return results
 
 
 def measure_and_store() -> dict[str, PingResult]:
     """
-    Measure latency, persist results to PingRecord, then feed the slowdown detector.
+    Measure latency, persist to PingRecord, feed the slowdown detector.
     Called every 60 seconds by APScheduler.
     """
-    results = measure_latency()
+    from clarinet.database import SessionLocal
+    from clarinet.models import PingRecord
 
-    # Persist to PingRecord for latency history charts
-    try:
-        from clarinet.database import SessionLocal
-        from clarinet.models import PingRecord
-        from datetime import datetime, timezone
+    with SessionLocal() as db:
+        results = measure_latency(db)
         now = datetime.now(timezone.utc)
-        with SessionLocal() as db:
-            for name, r in results.items():
-                db.add(PingRecord(
-                    measured_at=now,
-                    target=name,
-                    host=r.host,
-                    avg_ms=r.avg_ms,
-                    min_ms=r.min_ms,
-                    max_ms=r.max_ms,
-                    packet_loss=r.packet_loss,
-                    reachable=r.reachable,
-                ))
-            db.commit()
-    except Exception as e:
-        log.debug("PingRecord write failed: %s", e)
+        for name, r in results.items():
+            db.add(PingRecord(
+                measured_at=now,
+                target=name,
+                host=r.host,
+                avg_ms=r.avg_ms,
+                min_ms=r.min_ms,
+                max_ms=r.max_ms,
+                packet_loss=r.packet_loss,
+                reachable=r.reachable,
+            ))
+        db.commit()
 
     try:
         from clarinet.analytics.diagnosis import check_slowdown
         check_slowdown(results)
-    except Exception as e:
-        log.error("Slowdown check error: %s", e)
-    return results
+    except Exception as exc:
+        log.error("Slowdown check error: %s", exc)
 
+    return results
