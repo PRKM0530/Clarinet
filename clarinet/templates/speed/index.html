@@ -9,31 +9,35 @@
       <h2>Speed & Plan</h2>
       <p>ISP plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} ↓ / {{ plan_upload|round(0)|int }} ↑ Mbps</strong></p>
     </div>
-    <form method="post" action="/speed/run">
-      <button class="btn btn-primary"><i class="bi bi-play-circle"></i> Run Speed Test Now</button>
-    </form>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="/speed/report" class="btn btn-secondary">Report for your provider</a>
+      <a href="/speed/export.csv" class="btn btn-secondary">Export CSV</a>
+      <form method="post" action="/speed/run">
+        <button class="btn btn-primary">Run speed test now</button>
+      </form>
+    </div>
   </div>
 </div>
 
 {% if latest %}
 <div class="stat-grid" style="margin-bottom:24px">
   <div class="stat-card stat-blue">
-    <div class="stat-label"><i class="bi bi-cloud-arrow-down"></i> Download</div>
+    <div class="stat-label">Download</div>
     <div class="stat-value">{{ latest.download_mbps|round(1) }} <small>Mbps</small></div>
     <div class="stat-meta">Plan: {{ plan_download|round(0)|int }} Mbps</div>
   </div>
   <div class="stat-card stat-green">
-    <div class="stat-label"><i class="bi bi-cloud-arrow-up"></i> Upload</div>
+    <div class="stat-label">Upload</div>
     <div class="stat-value">{{ latest.upload_mbps|round(1) }} <small>Mbps</small></div>
     <div class="stat-meta">Plan: {{ plan_upload|round(0)|int }} Mbps</div>
   </div>
   <div class="stat-card {% if latest.latency_ms > 80 %}stat-orange{% else %}stat-teal{% endif %}">
-    <div class="stat-label"><i class="bi bi-activity"></i> Latency</div>
+    <div class="stat-label">Latency</div>
     <div class="stat-value">{{ latest.latency_ms|round(0)|int }} <small>ms</small></div>
     <div class="stat-meta">Server: {{ latest.server_host or '—' }}</div>
   </div>
   <div class="stat-card {% if latest.below_plan %}stat-red{% else %}stat-green{% endif %}">
-    <div class="stat-label"><i class="bi bi-check-circle"></i> Status</div>
+    <div class="stat-label">Status</div>
     <div class="stat-value" style="font-size:18px">
       {% if latest.below_plan %}Below plan{% else %}On target{% endif %}
     </div>
@@ -45,7 +49,7 @@
 <!-- Chart -->
 <div class="card" style="margin-bottom:20px">
   <div class="card-header">
-    <i class="bi bi-graph-up" style="color:var(--text-3)"></i>
+    
     <span class="card-header-title">Speed History</span>
     <span class="card-header-sub">Last 30 tests</span>
   </div>
@@ -57,7 +61,7 @@
 <!-- Results table -->
 <div class="card">
   <div class="card-header">
-    <i class="bi bi-table" style="color:var(--text-3)"></i>
+    
     <span class="card-header-title">All Results</span>
   </div>
   <div class="table-wrap">
@@ -82,7 +86,7 @@
         {% else %}
         <tr><td colspan="6">
           <div class="empty-state">
-            <i class="bi bi-speedometer2"></i>
+            
             <h4>No speed tests yet</h4>
             <p>Run a test manually or wait for the scheduled test.</p>
           </div>

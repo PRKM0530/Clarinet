@@ -184,3 +184,26 @@ def speed_summary(request: Request, db: Session = Depends(get_db)):
         "plan_upload": plan_ul,
         "mode": mode,
     })
+
+
+@router.get("/report", response_class=HTMLResponse)
+def speed_report_page(request: Request, db: Session = Depends(get_db)):
+    """Printable comparison of speed tests with the plan, to show the provider (UC-08)."""
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+
+    from clarinet.core_svc.speed_report import build_speed_report
+    try:
+        days = int(request.query_params.get("days", "30"))
+    except ValueError:
+        days = 30
+    days = days if days in (7, 30, 90) else 30
+
+    return templates.TemplateResponse("speed/report.html", {
+        "request": request,
+        "user": result,
+        "page": "speed",
+        "report": build_speed_report(db, days),
+        "generated": datetime.now(timezone.utc),
+    })

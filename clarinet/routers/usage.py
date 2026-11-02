@@ -44,6 +44,7 @@ def usage_page(request: Request, db: Session = Depends(get_db)):
         "usage": usage,
         "device": None,
         "device_rows": _device_rows(db, usage),
+        "activity_rows": _activity_rows(usage),
         "by_day_json": _json_safe(usage.by_day),
         "by_hour_json": _json_safe(usage.by_hour),
     })
@@ -79,6 +80,7 @@ def usage_device(device_id: int, request: Request, db: Session = Depends(get_db)
         "usage": usage,
         "device": device,
         "device_rows": _device_rows(db, usage),
+        "activity_rows": _activity_rows(usage),
         "by_day_json": _json_safe(usage.by_day),
         "by_hour_json": _json_safe(usage.by_hour),
     })
@@ -110,6 +112,7 @@ def api_usage_summary(request: Request, db: Session = Depends(get_db)):
         "bytes_out": usage.bytes_out,
         "by_day": usage.by_day,
         "by_hour": usage.by_hour,
+        "by_activity": usage.by_activity,
     }
 
 
@@ -197,6 +200,17 @@ def _clean_period(period: str) -> str:
         return period
     except ValueError:
         return "week"
+
+
+def _activity_rows(usage) -> list[dict]:
+    """Activity types with their share of the total, biggest first."""
+    from clarinet.core_svc.activity import LABELS
+    total = sum(usage.by_activity.values())
+    return [
+        {"key": key, "label": LABELS.get(key, key.title()), "bytes": value,
+         "pct": round(value * 100 / total, 1) if total else 0}
+        for key, value in usage.by_activity.items()
+    ]
 
 
 def _device_rows(db, usage) -> list[dict]:

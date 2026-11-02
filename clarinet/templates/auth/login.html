@@ -2,14 +2,12 @@
 {% block title %}Sign In{% endblock %}
 {% block content %}
 <div class="auth-card">
-  <div class="auth-logo">🎵</div>
+  <div class="auth-logo">Clarinet</div>
   <div class="auth-title">Sign in to Clarinet</div>
   <div class="auth-sub">Enter your credentials to access the dashboard.</div>
 
   {% if error %}
-  <div style="background:var(--red-bg);border:1px solid rgba(239,68,68,.25);border-radius:var(--radius);padding:10px 14px;margin-bottom:18px;font-size:13px;color:#f87171;display:flex;align-items:center;gap:8px;">
-    <i class="bi bi-exclamation-circle-fill"></i>{{ error }}
-  </div>
+  <div class="flash-bar error" style="margin:0 0 16px" role="alert">{{ error }}</div>
   {% endif %}
 
   <form method="post" action="/login">
@@ -24,7 +22,7 @@
              placeholder="••••••••" autocomplete="current-password" required />
     </div>
     <button type="submit" class="btn btn-primary btn-lg" style="width:100%;margin-top:8px">
-      <i class="bi bi-box-arrow-in-right"></i> Sign In
+      Sign In
     </button>
   </form>
   <p style="text-align:center;margin-top:16px;font-size:12px"><a href="/privacy" style="color:var(--text-3)">What does Clarinet collect?</a></p>

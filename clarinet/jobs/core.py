@@ -212,9 +212,11 @@ def retention() -> None:
             retention_traffic_days,
             retention_samples_hours,
             retention_login_attempts_days,
+            retention_domain_days,
         )
 
         with SessionLocal() as db:
+            d_days = retention_domain_days(db)
             s_hours = retention_samples_hours(db)
             t_days = retention_traffic_days(db)
             la_days = retention_login_attempts_days(db)
@@ -223,7 +225,8 @@ def retention() -> None:
             n1 = purge.purge_old_samples(db, hours=s_hours)
             n2 = purge.purge_old_usage(db, days=t_days)
             n3 = purge.purge_old_login_attempts(db, days=la_days)
-            log.info("retention: samples=%d usage=%d logins=%d purged", n1, n2, n3)
+            n4 = purge.purge_old_domains(db, days=d_days)
+            log.info("retention: samples=%d usage=%d logins=%d domains=%d purged", n1, n2, n3, n4)
     except Exception as exc:
         log.warning("retention job failed: %s", exc)
 

@@ -203,6 +203,12 @@ def scan_once(db, interface: str, subnet: str | None = None) -> list[dict]:
         random_mac = is_random_mac(mac)
 
         existing = db.query(Device).filter(Device.mac_address == mac).first()
+        if existing is None:
+            # An address the admin merged into another device is that device, not a new one
+            from clarinet.models.merging import MergedMac
+            alias = db.get(MergedMac, mac)
+            if alias is not None:
+                existing = db.get(Device, alias.primary_device_id)
 
         if existing is None:
             # New device

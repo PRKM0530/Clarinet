@@ -232,12 +232,12 @@ def test_dashboard_shows_the_limit_to_the_admin_only(world):
     with SessionLocal() as db:
         db.add(Settings(key="limit.bytes", value=str(100 * GB)))
         db.commit()
-    assert "Monthly Data" in admin().get("/dashboard").text
-    assert "Monthly Data" not in member().get("/dashboard").text
+    assert "Monthly data" in admin().get("/dashboard").text
+    assert "Monthly data" not in member().get("/dashboard").text
 
 
 def test_dashboard_has_no_limit_card_when_no_limit_is_set(world):
-    assert "Monthly Data" not in admin().get("/dashboard").text
+    assert "Monthly data" not in admin().get("/dashboard").text
 
 
 # SYS-4 / SYS-5: export and delete

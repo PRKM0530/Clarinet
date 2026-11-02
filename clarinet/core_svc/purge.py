@@ -66,6 +66,17 @@ def purge_old_usage(db: Session, days: int = 90) -> int:
         return 0
 
 
+def purge_old_domains(db: Session, days: int = 7) -> int:
+    """Delete domain-level detail older than `days`. The per-activity totals stay."""
+    from datetime import datetime, timedelta
+    from clarinet.models.traffic import DomainObservation
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    count = db.query(DomainObservation).filter(DomainObservation.observed_at < cutoff).delete()
+    db.commit()
+    return count
+
+
 def purge_device(db: Session, device_id: int) -> bool:
     """
     Delete a device and all its dependent data.

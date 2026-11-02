@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Clarinet{% endblock %} — Network Monitor</title>
-  <meta name="description" content="{% block meta_desc %}Clarinet home network monitor{% endblock %}" />
+  <meta name="color-scheme" content="light dark" />
+  <title>{% block title %}Clarinet{% endblock %} - Clarinet</title>
   <link rel="stylesheet" href="/static/fonts/bootstrap-icons.css" />
   <link rel="stylesheet" href="/static/css/clarinet.css" />
   {% block head_extra %}{% endblock %}
 </head>
 <body>
+<a class="skip-link" href="#content">Skip to the content</a>
 {% block outer_layout %}
-<div class="auth-page">
+<main class="auth-page" id="content">
   {% block content %}{% endblock %}
-</div>
+</main>
 {% endblock %}
-<script src="/static/js/bootstrap.bundle.min.js"></script>
 <script src="/static/js/chart.min.js"></script>
 <script src="/static/js/clarinet.js"></script>
 {% block scripts %}{% endblock %}

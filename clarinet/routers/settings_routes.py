@@ -64,6 +64,7 @@ def update_settings(
     plan_upload_mbps: Optional[str]   = Form(None),
     billing_day: Optional[str]        = Form(None),
     monthly_limit_gb: Optional[str]   = Form(None),
+    speed_report_threshold_pct: Optional[str] = Form(None),
     speed_test_interval_hours: Optional[str] = Form(None),
     slowdown_latency_multiplier: Optional[str] = Form(None),
     slowdown_speed_threshold: Optional[str]    = Form(None),
@@ -98,6 +99,13 @@ def update_settings(
             if not (0 < gb <= 1_000_000):
                 return RedirectResponse(url="/settings?error=bad_limit", status_code=302)
             params["limit.bytes"] = str(int(gb * 1_073_741_824))
+
+    # A speed test under this share of the plan counts as "below plan" in the speed report
+    if speed_report_threshold_pct is not None and speed_report_threshold_pct.strip() != "":
+        text = speed_report_threshold_pct.strip()
+        if not text.isdigit() or not (10 <= int(text) <= 100):
+            return RedirectResponse(url="/settings?error=bad_threshold", status_code=302)
+        params["speed_report_threshold_pct"] = text
 
     changed = []
     for key, val in params.items():

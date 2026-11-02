@@ -2,13 +2,13 @@
 {% block title %}Setup{% endblock %}
 {% block content %}
 <div class="auth-card auth-card-wide">
-  <div class="auth-logo">🎵</div>
+  <div class="auth-logo">Clarinet</div>
   <div class="auth-title">Welcome to Clarinet</div>
   <div class="auth-sub">Set up your network monitor in under a minute.</div>
 
   {% if error %}
   <div style="background:var(--red-bg);border:1px solid rgba(239,68,68,.25);border-radius:var(--radius);padding:10px 14px;margin-bottom:20px;font-size:13px;color:#f87171;display:flex;align-items:center;gap:8px;">
-    <i class="bi bi-exclamation-circle-fill"></i>{{ error }}
+    {{ error }}
   </div>
   {% endif %}
 
@@ -22,16 +22,16 @@
       </div>
       <div class="form-row">
         <div>
-          <label class="form-label">Username</label>
-          <input type="text" name="username" class="form-input" placeholder="admin" required minlength="3" />
+          <label class="form-label" for="f-username-1">Username</label>
+          <input id="f-username-1" type="text" name="username" class="form-input" placeholder="admin" required minlength="3" />
         </div>
         <div>
-          <label class="form-label">Password</label>
-          <input type="password" name="password" class="form-input" placeholder="Min. 8 characters" required minlength="8" />
+          <label class="form-label" for="f-password-1">Password</label>
+          <input id="f-password-1" type="password" name="password" class="form-input" placeholder="Min. 8 characters" required minlength="8" />
         </div>
         <div>
-          <label class="form-label">Confirm password</label>
-          <input type="password" name="password_confirm" class="form-input" placeholder="Repeat password" required />
+          <label class="form-label" for="f-password_confirm-1">Confirm password</label>
+          <input id="f-password_confirm-1" type="password" name="password_confirm" class="form-input" placeholder="Repeat password" required />
         </div>
       </div>
     </div>
@@ -46,21 +46,18 @@
         <label class="mode-card selected" id="mode-monitor-lbl">
           <input type="radio" name="network_mode" value="MONITOR" checked
                  onchange="selectMode('monitor')" />
-          <div class="mode-icon">📊</div>
           <div class="mode-label">Monitor Only</div>
           <div class="mode-desc">View stats — no blocking</div>
         </label>
         <label class="mode-card" id="mode-full-lbl">
           <input type="radio" name="network_mode" value="FULL"
                  onchange="selectMode('full')" />
-          <div class="mode-icon">🔧</div>
           <div class="mode-label">Full Control</div>
           <div class="mode-desc">Block, shape, vouchers</div>
         </label>
         <label class="mode-card" id="mode-public-lbl">
           <input type="radio" name="network_mode" value="PUBLIC"
                  onchange="selectMode('public')" />
-          <div class="mode-icon">🌐</div>
           <div class="mode-label">Public Network</div>
           <div class="mode-desc">Guest-only access</div>
         </label>
@@ -75,38 +72,36 @@
       </div>
       <div class="form-row">
         <div>
-          <label class="form-label">Download speed (Mbps)</label>
-          <input type="number" name="plan_download" class="form-input" value="100" min="1" step="0.5" />
+          <label class="form-label" for="f-plan_download-1">Download speed (Mbps)</label>
+          <input id="f-plan_download-1" type="number" name="plan_download" class="form-input" value="100" min="1" step="0.5" />
         </div>
         <div>
-          <label class="form-label">Upload speed (Mbps)</label>
-          <input type="number" name="plan_upload" class="form-input" value="20" min="1" step="0.5" />
+          <label class="form-label" for="f-plan_upload-1">Upload speed (Mbps)</label>
+          <input id="f-plan_upload-1" type="number" name="plan_upload" class="form-input" value="20" min="1" step="0.5" />
         </div>
         <div>
-          <label class="form-label">Billing resets on day</label>
-          <input type="number" name="billing_day" class="form-input" value="1" min="1" max="28" />
+          <label class="form-label" for="f-billing_day-1">Billing resets on day</label>
+          <input id="f-billing_day-1" type="number" name="billing_day" class="form-input" value="1" min="1" max="28" />
         </div>
         <div>
-          <label class="form-label">Monthly data limit (GB, optional)</label>
-          <input type="number" name="monthly_limit_gb" class="form-input" placeholder="no limit" min="1" step="1" />
+          <label class="form-label" for="f-monthly_limit_gb-1">Monthly data limit (GB, optional)</label>
+          <input id="f-monthly_limit_gb-1" type="number" name="monthly_limit_gb" class="form-input" placeholder="no limit" min="1" step="1" />
         </div>
       </div>
     </div>
 
     <hr class="divider" />
 
-    <div style="display:flex;justify-content:flex-end">
-      <button type="submit" class="btn btn-primary btn-lg">
-        <i class="bi bi-check-lg"></i> Finish Setup &amp; Create Account
-      </button>
+    <div class="form-group">
+      <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.93rem;color:var(--text-2);cursor:pointer">
+        <input type="checkbox" name="consent" value="yes" required style="margin-top:4px" />
+        <span>I own this network, or I have permission to monitor it, and I will tell the people who use it.
+          <a href="/privacy" target="_blank" rel="noopener">What Clarinet collects</a></span>
+      </label>
     </div>
 
-      <div class="form-group" style="margin-top:8px">
-      <label style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text-2);cursor:pointer">
-        <input type="checkbox" name="consent" value="yes" required style="margin-top:3px" />
-        <span>I own this network, or I have permission to monitor it, and I will tell the people who use it.
-          <a href="/privacy" target="_blank">What Clarinet collects</a></span>
-      </label>
+    <div style="display:flex;justify-content:flex-end">
+      <button type="submit" class="btn btn-primary btn-lg">Finish setup and create account</button>
     </div>
   </form>
 </div>

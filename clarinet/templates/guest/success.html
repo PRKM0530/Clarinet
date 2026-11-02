@@ -1,24 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Connected — Guest Access{% endblock %}
+{% block title %}Connected{% endblock %}
 {% block content %}
-<div class="auth-wrapper d-flex align-items-center justify-content-center min-vh-100">
-  <div class="auth-card text-center">
-    <div style="font-size:3rem;margin-bottom:.5rem">🎉</div>
-    <h2 class="fw-bold mb-2">You're connected!</h2>
-    <p class="text-muted mb-1">Your voucher <code class="fw-bold">{{ voucher.code }}</code> is active.</p>
-    {% if voucher.data_cap_mb %}
-    <p class="text-muted mb-1">Data allowance: <strong>{{ voucher.data_cap_mb }} MB</strong></p>
-    {% endif %}
-    {% if voucher.speed_cap_mbps %}
-    <p class="text-muted mb-1">Speed cap: <strong>{{ voucher.speed_cap_mbps }} Mbps</strong></p>
-    {% endif %}
-    <p class="text-muted mb-4">
-      Expires: <strong>{{ voucher.expires_at.strftime('%d %b %Y at %H:%M') }}</strong>
-    </p>
-    <div class="alert alert-info text-start">
-      <i class="bi bi-info-circle me-2"></i>
-      You may now browse the internet. Your access will automatically end when the voucher expires.
-    </div>
-  </div>
+<div class="auth-card">
+  <div class="auth-logo">Clarinet</div>
+  <h2 style="margin-bottom:6px">You are connected</h2>
+  <p class="muted">Your voucher <code>{{ voucher.code }}</code> is active.</p>
+  <table class="facts">
+    {% if voucher.data_cap_mb %}<tr><th>Data allowance</th><td>{{ voucher.data_cap_mb }} MB</td></tr>{% endif %}
+    {% if voucher.speed_cap_mbps %}<tr><th>Speed limit</th><td>{{ voucher.speed_cap_mbps }} Mbps</td></tr>{% endif %}
+    <tr><th>Ends</th><td>{{ voucher.expires_at.strftime('%d %b %Y at %H:%M') }}</td></tr>
+  </table>
+  <p class="muted small">You can browse the internet now. Access ends by itself when the voucher expires.</p>
 </div>
 {% endblock %}

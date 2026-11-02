@@ -60,7 +60,13 @@ def topbar_api(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
+    new_devices = None
+    if user.is_admin:
+        from clarinet.models import Device
+        new_devices = db.query(Device).filter(Device.state == "NEW").count()
+
     return {
+        "new_devices": new_devices,
         "mode": mode.value,
         "mode_word": mode_word(mode),
         "network": "private" if mode.value != "PUBLIC" else "public",

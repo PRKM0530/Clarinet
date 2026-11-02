@@ -4,12 +4,12 @@
 {% block content %}
 <div class="page-header">
   <h2>Slowdown Events</h2>
-  <p>Detected network slowdowns with AI-powered root-cause analysis.</p>
+  <p>Times the network was slower than usual, with the most likely cause for each.</p>
 </div>
 
 {% if active %}
 <div class="slowdown-banner" style="margin-bottom:24px">
-  <div class="slowdown-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+  <div class="slowdown-banner-icon"></div>
   <div>
     <div style="font-size:14.5px;font-weight:700;color:var(--red)">Active Slowdown</div>
     <div style="font-size:13px;color:var(--text-2);margin-top:3px">
@@ -32,7 +32,7 @@
 {% set raw = item.raw %}
 <div class="card" style="margin-bottom:16px">
   <div class="card-header">
-    <i class="bi bi-exclamation-circle" style="color:{{ 'var(--red)' if not e.ended_at else 'var(--text-3)' }}"></i>
+    
     <div>
       <div class="card-header-title">{{ e.started_at.strftime('%d %b %Y, %H:%M') }}</div>
       <div style="font-size:11.5px;color:var(--text-3);margin-top:1px">
@@ -89,7 +89,7 @@
 
 {% else %}
 <div class="empty-state" style="margin-top:40px">
-  <i class="bi bi-check-circle" style="color:var(--green)"></i>
+  
   <h4>No slowdown events</h4>
   <p>Clarinet monitors your latency and speed 24/7. Events appear here automatically.</p>
 </div>

@@ -7,34 +7,34 @@
   <p>Network configuration, member management, and system preferences.</p>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+<div class="two-col">
 
   <!-- Network settings -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-sliders" style="color:var(--accent)"></i>
+      
       <span class="card-header-title">Network Configuration</span>
     </div>
     <div class="card-body">
       <form method="post" action="/settings/update">
         <div class="form-group">
-          <label class="form-label">Network Mode</label>
-          <select name="network_mode" class="form-select">
-            <option value="MONITOR"{{ ' selected' if cfg.get('network_mode') == 'MONITOR' else '' }}>📊 Monitor Only — view stats, no control</option>
-            <option value="FULL"{{ ' selected' if cfg.get('network_mode') == 'FULL' else '' }}>🔧 Full Control — blocking, shaping, vouchers</option>
-            <option value="PUBLIC"{{ ' selected' if cfg.get('network_mode') == 'PUBLIC' else '' }}>🌐 Public Network — guest-only access</option>
+          <label class="form-label" for="f-network_mode-1">Network Mode</label>
+          <select id="f-network_mode-1" name="network_mode" class="form-select">
+            <option value="MONITOR"{{ ' selected' if cfg.get('network_mode') == 'MONITOR' else '' }}>Monitor Only — view stats, no control</option>
+            <option value="FULL"{{ ' selected' if cfg.get('network_mode') == 'FULL' else '' }}>Full Control — blocking, shaping, vouchers</option>
+            <option value="PUBLIC"{{ ' selected' if cfg.get('network_mode') == 'PUBLIC' else '' }}>Public Network — guest-only access</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Network Interface</label>
-          <input type="text" name="network_interface" class="form-input"
+          <label class="form-label" for="f-network_interface-1">Network Interface</label>
+          <input id="f-network_interface-1" type="text" name="network_interface" class="form-input"
                  value="{{ cfg.get('network_interface', 'eth0') }}"
                  placeholder="eth0 / ens3 / wlan0" />
           <p class="form-help">The interface connected to your router.</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Router IP</label>
-          <input type="text" name="router_ip" class="form-input"
+          <label class="form-label" for="f-router_ip-1">Router IP</label>
+          <input id="f-router_ip-1" type="text" name="router_ip" class="form-input"
                  value="{{ cfg.get('router_ip', '192.168.1.1') }}"
                  placeholder="192.168.1.1" />
         </div>
@@ -42,50 +42,55 @@
         <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:12px">ISP Plan</div>
         <div class="form-row">
           <div>
-            <label class="form-label">Download (Mbps)</label>
-            <input type="number" name="plan_download_mbps" class="form-input"
+            <label class="form-label" for="f-plan_download_mbps-1">Download (Mbps)</label>
+            <input id="f-plan_download_mbps-1" type="number" name="plan_download_mbps" class="form-input"
                    value="{{ cfg.get('plan_download_mbps', '100') }}" min="1" step="0.5" />
           </div>
           <div>
-            <label class="form-label">Upload (Mbps)</label>
-            <input type="number" name="plan_upload_mbps" class="form-input"
+            <label class="form-label" for="f-plan_upload_mbps-1">Upload (Mbps)</label>
+            <input id="f-plan_upload_mbps-1" type="number" name="plan_upload_mbps" class="form-input"
                    value="{{ cfg.get('plan_upload_mbps', '20') }}" min="1" step="0.5" />
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Billing day of month</label>
-          <input type="number" name="billing_day" class="form-input"
+          <label class="form-label" for="f-billing_day-1">Billing day of month</label>
+          <input id="f-billing_day-1" type="number" name="billing_day" class="form-input"
                  value="{{ cfg.get('billing_day', '1') }}" min="1" max="28" />
         </div>
         <div class="form-group">
-          <label class="form-label">Monthly data limit (GB, leave empty for no limit)</label>
-          <input type="number" name="monthly_limit_gb" class="form-input" min="1" step="1"
+          <label class="form-label" for="f-monthly_limit_gb-1">Monthly data limit (GB, leave empty for no limit)</label>
+          <input id="f-monthly_limit_gb-1" type="number" name="monthly_limit_gb" class="form-input" min="1" step="1"
                  value="{{ ((cfg.get('limit.bytes')|int) / 1073741824)|round(0)|int if cfg.get('limit.bytes') else '' }}" />
           <div style="font-size:11.5px;color:var(--text-3);margin-top:4px">Clarinet warns at 70%, 90% and 100% of this amount.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-speed_report_threshold_pct-1">Count a speed test as below plan under (% of plan)</label>
+          <input id="f-speed_report_threshold_pct-1" type="number" name="speed_report_threshold_pct" class="form-input" min="10" max="100" step="1"
+                 value="{{ cfg.get('speed_report_threshold_pct', '80') }}" />
         </div>
         <hr class="divider" />
         <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:12px">Slowdown Detection</div>
         <div class="form-row">
           <div>
-            <label class="form-label">Latency multiplier</label>
-            <input type="number" name="slowdown_latency_multiplier" class="form-input"
+            <label class="form-label" for="f-slowdown_latency_multiplier-1">Latency multiplier</label>
+            <input id="f-slowdown_latency_multiplier-1" type="number" name="slowdown_latency_multiplier" class="form-input"
                    value="{{ cfg.get('slowdown_latency_multiplier', '3.0') }}" step="0.1" min="1.5" />
             <p class="form-help">Trigger when latency is N× the baseline.</p>
           </div>
           <div>
-            <label class="form-label">Speed threshold</label>
-            <input type="number" name="slowdown_speed_threshold" class="form-input"
+            <label class="form-label" for="f-slowdown_speed_threshold-1">Speed threshold</label>
+            <input id="f-slowdown_speed_threshold-1" type="number" name="slowdown_speed_threshold" class="form-input"
                    value="{{ cfg.get('slowdown_speed_threshold', '0.7') }}" step="0.05" min="0.1" max="1" />
             <p class="form-help">Fraction of plan speed (e.g. 0.7 = 70%).</p>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Speed test interval (hours)</label>
-          <input type="number" name="speed_test_interval_hours" class="form-input"
+          <label class="form-label" for="f-speed_test_interval_hours-1">Speed test interval (hours)</label>
+          <input id="f-speed_test_interval_hours-1" type="number" name="speed_test_interval_hours" class="form-input"
                  value="{{ cfg.get('speed_test_interval_hours', '6') }}" min="1" max="24" />
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%">
-          <i class="bi bi-floppy"></i> Save Settings
+          Save Settings
         </button>
       </form>
     </div>
@@ -95,10 +100,10 @@
   <div>
     <div class="card" style="margin-bottom:16px">
       <div class="card-header">
-        <i class="bi bi-people" style="color:var(--text-3)"></i>
+        
         <span class="card-header-title">Members</span>
         <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="openModal('add-member-modal')">
-          <i class="bi bi-plus"></i> Add
+          Add
         </button>
       </div>
       <div class="table-wrap">
@@ -124,9 +129,7 @@
               <td style="text-align:right;padding-right:14px">
                 {% if m.member_id != user.member_id %}
                 <form method="post" action="/settings/members/{{ m.member_id }}/toggle">
-                  <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Deactivate' if m.is_active else 'Activate' }}">
-                    <i class="bi bi-{{ 'lock' if m.is_active else 'unlock' }}"></i>
-                  </button>
+                  <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Deactivate' if m.is_active else 'Activate' }}">{{ 'Deactivate' if m.is_active else 'Activate' }}</button>
                 </form>
                 {% endif %}
               </td>
@@ -140,25 +143,25 @@
     <!-- Change own password -->
     <div class="card">
       <div class="card-header">
-        <i class="bi bi-key" style="color:var(--text-3)"></i>
+        
         <span class="card-header-title">Change Password</span>
       </div>
       <div class="card-body">
         <form method="post" action="/settings/password">
           <div class="form-group">
-            <label class="form-label">Current password</label>
-            <input type="password" name="current_password" class="form-input" placeholder="••••••••" required />
+            <label class="form-label" for="f-current_password-1">Current password</label>
+            <input id="f-current_password-1" type="password" name="current_password" class="form-input" placeholder="••••••••" required />
           </div>
           <div class="form-group">
-            <label class="form-label">New password</label>
-            <input type="password" name="new_password" class="form-input" placeholder="Min. 8 characters" required minlength="8" />
+            <label class="form-label" for="f-new_password-1">New password</label>
+            <input id="f-new_password-1" type="password" name="new_password" class="form-input" placeholder="Min. 8 characters" required minlength="8" />
           </div>
           <div class="form-group">
-            <label class="form-label">Confirm new password</label>
-            <input type="password" name="confirm_password" class="form-input" placeholder="Repeat" required />
+            <label class="form-label" for="f-confirm_password-1">Confirm new password</label>
+            <input id="f-confirm_password-1" type="password" name="confirm_password" class="form-input" placeholder="Repeat" required />
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%">
-            <i class="bi bi-key"></i> Change Password
+            Change Password
           </button>
         </form>
       </div>
@@ -177,16 +180,16 @@
     <form method="post" action="/settings/members/create">
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">Username</label>
-          <input type="text" name="username" class="form-input" required minlength="3" />
+          <label class="form-label" for="f-username-1">Username</label>
+          <input id="f-username-1" type="text" name="username" class="form-input" required minlength="3" />
         </div>
         <div class="form-group">
-          <label class="form-label">Password</label>
-          <input type="password" name="password" class="form-input" required minlength="8" />
+          <label class="form-label" for="f-password-1">Password</label>
+          <input id="f-password-1" type="password" name="password" class="form-input" required minlength="8" />
         </div>
         <div class="form-group">
-          <label class="form-label">Role</label>
-          <select name="role" class="form-select">
+          <label class="form-label" for="f-role-1">Role</label>
+          <select id="f-role-1" name="role" class="form-select">
             <option value="MEMBER">Member — limited access</option>
             <option value="ADMIN">Admin — full access</option>
           </select>
@@ -194,7 +197,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('add-member-modal')">Cancel</button>
-        <button type="submit" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add Member</button>
+        <button type="submit" class="btn btn-primary">Add Member</button>
       </div>
     </form>
   </div>
@@ -202,7 +205,7 @@
 
 <div class="card" style="margin-top:20px;border:1px solid var(--red)">
   <div class="card-header">
-    <i class="bi bi-trash3" style="color:var(--red)"></i>
+    
     <span class="card-header-title">Delete stored data</span>
   </div>
   <form method="post" action="/settings/purge" style="padding:16px"
@@ -212,7 +215,7 @@
       the audit log and your trusted access points are kept. Type <strong>DELETE</strong> to confirm.
     </p>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="text" name="confirm" class="form-input" style="max-width:180px" placeholder="DELETE" autocomplete="off" />
+      <input aria-label="DELETE" type="text" name="confirm" class="form-input" style="max-width:180px" placeholder="DELETE" autocomplete="off" />
       <button class="btn btn-danger" type="submit">Delete all data</button>
     </div>
   </form>

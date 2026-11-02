@@ -9,6 +9,7 @@
   <ul style="font-size:13.5px;line-height:1.7;color:var(--text-2);padding-left:20px">
     <li><strong>Devices:</strong> the hardware address (MAC), network address (IP), device name, maker and when each device was last seen.</li>
     <li><strong>How much data each device uses:</strong> bytes downloaded and uploaded, per device, per hour.</li>
+    <li><strong>Website names:</strong> only the main domain a device looks up, such as <code>youtube.com</code>. Clarinet uses these to say whether an hour was mostly streaming, browsing, gaming and so on. It does not keep the full address, the page, or anything you typed.</li>
     <li><strong>Connection quality:</strong> speed test results and how quickly the router and the internet respond.</li>
     <li><strong>Security observations:</strong> nearby Wi-Fi network names, the router's settings checks, and the networks this server has connected to.</li>
     <li><strong>Accounts and actions:</strong> usernames, scrambled (hashed) passwords, login attempts, and a log of what administrators change.</li>
@@ -17,12 +18,13 @@
   <h4 style="margin:20px 0 6px">What it does not record</h4>
   <ul style="font-size:13.5px;line-height:1.7;color:var(--text-2);padding-left:20px">
     <li>The content of your traffic: no messages, pages, passwords or files.</li>
-    <li>Which websites or apps you visit. Only the amount of data is counted.</li>
+    <li>Which pages you read, what you searched for, or what you did on a website. Clarinet only sees the domain name a device asked for.</li>
   </ul>
 
   <h4 style="margin:20px 0 6px">How long it is kept</h4>
   <ul style="font-size:13.5px;line-height:1.7;color:var(--text-2);padding-left:20px">
     <li>Hourly usage per device: {{ traffic_days }} days, then deleted automatically.</li>
+    <li>Website names: {{ domain_days }} days. After that only the totals for each type of activity are kept.</li>
     <li>Short-term traffic samples: {{ sample_hours }} hours.</li>
     <li>Login attempts: {{ login_days }} days.</li>
     <li>Everything else stays until an administrator deletes it (Settings, Delete stored data).</li>

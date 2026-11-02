@@ -94,10 +94,16 @@ def device_detail(device_id: int, request: Request, db: Session = Depends(get_db
     )
 
     from clarinet.models import Member
+    from clarinet.models.merging import MergedMac
     members = (
         db.query(Member).filter(Member.is_active == True).order_by(Member.username).all()  # noqa: E712
         if user.is_admin else []
     )
+    others = (
+        db.query(Device).filter(Device.device_id != device_id).order_by(Device.last_seen.desc()).all()
+        if user.is_admin else []
+    )
+    aliases = db.query(MergedMac).filter(MergedMac.primary_device_id == device_id).all() if user.is_admin else []
 
     return templates.TemplateResponse("devices/detail.html", {
         "request": request,
@@ -106,6 +112,8 @@ def device_detail(device_id: int, request: Request, db: Session = Depends(get_db
         "device": device,
         "history": history,
         "members": members,
+        "others": others,
+        "aliases": aliases,
         "info": request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })
@@ -238,6 +246,86 @@ def set_device_owner(
     audit(db, user.member_id, "SET_DEVICE_OWNER", "Device", device_id,
           {"old_owner_id": old_owner, "new_owner_id": new_owner})
     return RedirectResponse(url=f"/devices/{device_id}?info=owner_set", status_code=302)
+
+
+@router.post("/devices/{device_id}/merge")
+def merge_device(
+    device_id: int,
+    request: Request,
+    other_id: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Fold another entry into this device (DEV-5)."""
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+
+    from clarinet.core_svc.device_merge import MergeError, merge_devices
+    if not other_id.strip().isdigit():
+        return RedirectResponse(url=f"/devices/{device_id}?error=bad_merge", status_code=302)
+    try:
+        merge_devices(db, device_id, int(other_id), actor_id=user.member_id)
+    except MergeError:
+        return RedirectResponse(url=f"/devices/{device_id}?error=bad_merge", status_code=302)
+    audit(db, user.member_id, "MERGE_DEVICES", "Device", device_id, {"merged_id": int(other_id)})
+    return RedirectResponse(url=f"/devices/{device_id}?info=merged", status_code=302)
+
+
+@router.post("/devices/{device_id}/split")
+def split_device(
+    device_id: int,
+    request: Request,
+    mac: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Make a merged address its own device again (DEV-5)."""
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+
+    from clarinet.core_svc.device_merge import MergeError, split_address
+    from clarinet.models.merging import MergedMac
+    alias = db.get(MergedMac, mac.strip().upper())
+    if alias is None or alias.primary_device_id != device_id:
+        return RedirectResponse(url=f"/devices/{device_id}?error=bad_merge", status_code=302)
+    try:
+        new_id = split_address(db, alias.mac_address, actor_id=user.member_id)
+    except MergeError:
+        return RedirectResponse(url=f"/devices/{device_id}?error=bad_merge", status_code=302)
+    audit(db, user.member_id, "SPLIT_DEVICE", "Device", device_id, {"mac": alias.mac_address, "new_id": new_id})
+    return RedirectResponse(url=f"/devices/{new_id}?info=split", status_code=302)
+
+
+@router.post("/devices/{device_id}/guest")
+def mark_device_guest(device_id: int, request: Request, db: Session = Depends(get_db)):
+    """Treat this device as a guest: internet only, no access to the rest of the network."""
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+
+    from clarinet.models import Device
+    from clarinet.models.devices_ext import DeviceEvent
+
+    device = db.get(Device, device_id)
+    if device is None:
+        return RedirectResponse(url="/devices?error=not_found", status_code=302)
+
+    old_state = device.state
+    device.state = "GUEST"
+    db.add(DeviceEvent(
+        device_id=device_id, event_type="STATE_CHANGE",
+        old_value=old_state, new_value="GUEST", actor_id=user.member_id,
+    ))
+    audit(db, user.member_id, "MARK_GUEST_DEVICE", "Device", device_id)
+    try:
+        from clarinet.enforcer.enforcer import request_reconcile
+        request_reconcile()
+    except Exception:
+        pass
+    return RedirectResponse(url=f"/devices/{device_id}?info=marked_guest", status_code=302)
 
 
 @router.post("/devices/{device_id}/block")

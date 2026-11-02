@@ -33,6 +33,8 @@ class UsageResult:
     by_day: dict[str, int] = field(default_factory=dict)
     # Per-hour totals (0–23)
     by_hour: dict[int, int] = field(default_factory=dict)
+    # Bytes per activity type: {"STREAMING": bytes_total}, biggest first
+    by_activity: dict[str, int] = field(default_factory=dict)
     period_start: str = ""
     period_end: str = ""
 
@@ -90,8 +92,6 @@ def usage_for(
     - Members see only their own devices (owner_member_id == member_id).
     - If device_id given, further filter to that device.
     """
-    from clarinet.core_svc.permissions import member_device_ids
-
     # Resolve date range
     if period == "billing":
         from clarinet.core_svc.timeutil import billing_period_start
@@ -99,6 +99,22 @@ def usage_for(
         end_date = date.today().isoformat()
     else:
         start_date, end_date = _date_range(period)
+
+    return usage_range(db, member, start_date, end_date, device_id=device_id)
+
+
+def usage_range(
+    db: Session,
+    member,
+    start_date: str,
+    end_date: str,
+    device_id: int | None = None,
+) -> UsageResult:
+    """
+    Aggregate usage between two dates (inclusive, YYYY-MM-DD) for what `member`
+    may see: everything for admins, only their own devices for members.
+    """
+    from clarinet.core_svc.permissions import member_device_ids
 
     # Allowed device scope
     allowed_ids = member_device_ids(db, member)
@@ -140,5 +156,24 @@ def usage_for(
         hr_total = result.by_hour.get(rec.hour, 0)
         result.by_hour[rec.hour] = hr_total + rec.bytes_in + rec.bytes_out
 
+    result.by_activity = _activity_totals(db, allowed_ids, start_date, end_date)
     return result
+
+
+def _activity_totals(db: Session, device_ids: list[int], start_date: str, end_date: str) -> dict[str, int]:
+    """Bytes per activity type for the given devices and dates, biggest first."""
+    from clarinet.models.traffic import UsageActivity
+
+    rows = (
+        db.query(UsageActivity.category, func.sum(UsageActivity.bytes_in + UsageActivity.bytes_out))
+        .filter(
+            UsageActivity.device_id.in_(device_ids),
+            UsageActivity.date >= start_date,
+            UsageActivity.date <= end_date,
+        )
+        .group_by(UsageActivity.category)
+        .all()
+    )
+    totals = {category: int(total or 0) for category, total in rows if total}
+    return dict(sorted(totals.items(), key=lambda kv: kv[1], reverse=True))
 

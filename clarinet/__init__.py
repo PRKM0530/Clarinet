@@ -34,6 +34,19 @@ STATIC_DIR = APP_DIR / "static"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
+def _size(num_bytes) -> str:
+    """12345678 -> '11.8 MB'. Picks KB, MB, GB or TB so every page writes sizes the same way."""
+    value = float(num_bytes or 0)
+    for unit, step in (("B", 1024), ("KB", 1024), ("MB", 1024), ("GB", 1024)):
+        if value < step:
+            return f"{value:.0f} {unit}" if unit in ("B", "KB") else (f"{value:.1f} {unit}" if value < 100 else f"{value:.0f} {unit}")
+        value /= step
+    return f"{value:.1f} TB"
+
+
+templates.env.filters["size"] = _size
+
+
 # Default settings seeded on first run
 DEFAULT_SETTINGS = {
     "network_mode": settings.NETWORK_MODE,

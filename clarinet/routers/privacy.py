@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from clarinet import templates
 from clarinet.auth import get_session_user
 from clarinet.core_svc.settings_m1 import (
-    retention_login_attempts_days, retention_samples_hours, retention_traffic_days,
+    retention_domain_days, retention_login_attempts_days, retention_samples_hours, retention_traffic_days,
 )
 from clarinet.database import get_db
 
@@ -25,6 +25,7 @@ def privacy_page(request: Request, db: Session = Depends(get_db)):
         "request": request,
         "user": get_session_user(request, db),
         "traffic_days": retention_traffic_days(db),
+        "domain_days": retention_domain_days(db),
         "sample_hours": retention_samples_hours(db),
         "login_days": retention_login_attempts_days(db),
     })

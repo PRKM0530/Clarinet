@@ -1,152 +1,104 @@
 {% extends "base.html" %}
+{% import "_messages.html" as msgs %}
+{% macro nav_link(href, key, icon, label) %}
+<a href="{{ href }}" class="sidebar-link {{ 'active' if page == key else '' }}"{% if page == key %} aria-current="page"{% endif %}>
+  <i class="bi {{ icon }}" aria-hidden="true"></i> {{ label }}
+</a>
+{% endmacro %}
+
 {% block outer_layout %}
 <div class="app-layout">
 
-<!-- ── SIDEBAR ──────────────────────────────────────────────────────── -->
-<nav id="sidebar">
-  <a href="/dashboard" class="sidebar-brand">
-    <span class="sidebar-icon">🎵</span>
-    <span class="sidebar-name">Clarinet</span>
-  </a>
+<nav id="sidebar" aria-label="Main">
+  <a href="/dashboard" class="sidebar-brand">Clarinet</a>
 
   <div class="sidebar-section">
     <div class="sidebar-section-label">Overview</div>
-    <a href="/dashboard" class="sidebar-link {% if page == 'dashboard' %}active{% endif %}">
-      <i class="bi bi-grid-1x2"></i> Dashboard
-    </a>
-    <a href="/usage" class="sidebar-link {% if page == 'usage' %}active{% endif %}">
-      <i class="bi bi-bar-chart-line"></i> Usage
-    </a>
-    <a href="/priority" class="sidebar-link {% if page == 'priority' %}active{% endif %}">
-      <i class="bi bi-rocket"></i> Priority
-    </a>
+    {{ nav_link('/dashboard', 'dashboard', 'bi-grid-1x2', 'Dashboard') }}
+    {{ nav_link('/usage', 'usage', 'bi-bar-chart-line', 'Usage') }}
+    {{ nav_link('/reports', 'reports', 'bi-file-earmark-text', 'Reports') }}
+    {{ nav_link('/priority', 'priority', 'bi-lightning-charge', 'Priority') }}
+    {{ nav_link('/alerts', 'alerts', 'bi-bell', 'Alerts') }}
   </div>
 
   {% if user.is_admin %}
   <div class="sidebar-section">
     <div class="sidebar-section-label">Network</div>
-    <a href="/devices" class="sidebar-link {% if page == 'devices' %}active{% endif %}">
-      <i class="bi bi-hdd-network"></i> Devices
-      {% if new_device_count is defined and new_device_count %}
-      <span class="sidebar-badge sidebar-badge-warn">{{ new_device_count }}</span>
-      {% endif %}
-    </a>
-    <a href="/rules" class="sidebar-link {% if page == 'rules' %}active{% endif %}">
-      <i class="bi bi-clock"></i> Time Rules
-    </a>
-    <a href="/vouchers" class="sidebar-link {% if page == 'guest' %}active{% endif %}">
-      <i class="bi bi-ticket-perforated"></i> Guest Vouchers
-    </a>
+    {{ nav_link('/devices', 'devices', 'bi-hdd-network', 'Devices') }}
+    {{ nav_link('/rules', 'rules', 'bi-clock', 'Time rules') }}
+    {{ nav_link('/vouchers', 'guest', 'bi-ticket-perforated', 'Guest vouchers') }}
   </div>
 
   <div class="sidebar-section">
     <div class="sidebar-section-label">Diagnostics</div>
-    <a href="/alerts" class="sidebar-link {% if page == 'alerts' %}active{% endif %}">
-      <i class="bi bi-bell"></i> Alerts
-      {% if open_alert_count is defined and open_alert_count %}
-      <span class="sidebar-badge">{{ open_alert_count }}</span>
-      {% endif %}
-    </a>
-    <a href="/speed" class="sidebar-link {% if page == 'speed' %}active{% endif %}">
-      <i class="bi bi-speedometer2"></i> Speed Test
-    </a>
-    <a href="/slowdowns" class="sidebar-link {% if page == 'slowdowns' %}active{% endif %}">
-      <i class="bi bi-exclamation-triangle"></i> Slowdowns
-    </a>
-    <a href="/security" class="sidebar-link {% if page == 'security' %}active{% endif %}">
-      <i class="bi bi-shield"></i> Security
-    </a>
+    {{ nav_link('/speed', 'speed', 'bi-speedometer2', 'Speed test') }}
+    {{ nav_link('/slowdowns', 'slowdowns', 'bi-activity', 'Slowdowns') }}
+    {{ nav_link('/security', 'security', 'bi-shield', 'Security') }}
   </div>
 
   <div class="sidebar-section">
     <div class="sidebar-section-label">Admin</div>
-    <a href="/settings" class="sidebar-link {% if page == 'settings' %}active{% endif %}">
-      <i class="bi bi-sliders"></i> Settings
-    </a>
+    {{ nav_link('/settings', 'settings', 'bi-sliders', 'Settings') }}
+    {{ nav_link('/status', 'status', 'bi-heart-pulse', 'System status') }}
+  </div>
+  {% else %}
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Mine</div>
+    {{ nav_link('/devices', 'devices', 'bi-hdd-network', 'My devices') }}
   </div>
   {% endif %}
 
-  <!-- Sidebar footer -->
-  <a href="/privacy" class="sidebar-link" style="font-size:12px"><i class="bi bi-shield-lock"></i> Privacy</a>
-    <div class="sidebar-footer">
+  <div class="sidebar-section">
+    {{ nav_link('/privacy', 'privacy', 'bi-shield-lock', 'Privacy') }}
+  </div>
+
+  <div class="sidebar-footer">
     <div class="sidebar-user">
-      <div class="sidebar-avatar">{{ user.username[0].upper() }}</div>
+      <div class="sidebar-avatar" aria-hidden="true">{{ user.username[0].upper() }}</div>
       <div>
         <div class="sidebar-username">{{ user.username }}</div>
         <div class="sidebar-role">{{ user.role.title() }}</div>
       </div>
-      <a href="/logout" class="sidebar-logout" title="Sign out">
-        <i class="bi bi-box-arrow-right"></i>
+      <a href="/logout" class="sidebar-logout" title="Sign out" aria-label="Sign out">
+        <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
       </a>
     </div>
   </div>
 </nav>
 
-<!-- ── MAIN ─────────────────────────────────────────────────────────── -->
-<main id="main-content">
-
-  <!-- Topbar -->
+<div id="main-content" tabindex="-1">
   <header class="topbar">
-    <button class="btn btn-ghost btn-icon d-lg-none" id="sidebar-toggle">
-      <i class="bi bi-list" style="font-size:18px"></i>
+    <button class="btn btn-ghost btn-icon" id="sidebar-toggle" type="button" aria-label="Open the menu" aria-controls="sidebar">
+      <i class="bi bi-list" aria-hidden="true"></i>
     </button>
     <h1 class="topbar-title">{% block page_title %}{% endblock %}</h1>
     <div class="topbar-right">
-      <div class="ws-pill" id="ws-pill">
-        <span class="ws-dot connecting" id="ws-indicator"></span>
+      <span id="mode-label" title="What Clarinet is allowed to do on this network"></span>
+      <div class="ws-pill" id="ws-pill" role="status">
+        <span class="ws-dot connecting" id="ws-indicator" aria-hidden="true"></span>
         <span id="ws-label">Connecting</span>
       </div>
     </div>
   </header>
 
-  <!-- Flash messages -->
-  {# Short codes used in redirects, shown as plain sentences. Unknown text is shown as it is. #}
-  {% set flash_text = {
-    'forbidden': 'You do not have access to that page. It is only for administrators.',
-    'not_found': 'That item could not be found.',
-    'bad_owner': 'That member does not exist or is disabled.',
-    'confirm_delete': 'Nothing was deleted. Type DELETE in capitals to confirm.',
-    'data_deleted': 'All stored network data was deleted.',
-    'bad_limit': 'The data limit must be a positive number of GB.',
-    'cannot_disable_self': 'You cannot disable your own account.',
-    'username_taken': 'That username is already taken.',
-    'password_too_short': 'The password is too short (at least 8 characters).',
-    'monitor_mode_only': 'This needs full-control mode. Clarinet is currently only monitoring.',
-    'approved': 'Device approved.',
-    'blocked': 'Device blocked.',
-    'unblocked': 'Device unblocked.',
-    'renamed': 'Device renamed.',
-    'owner_set': 'Device owner saved.',
-    'deleted': 'Deleted.',
-    'saved': 'Settings saved.',
-    'member_created': 'Member created.',
-    'password_reset': 'Password reset.',
-    'acked': 'Alert acknowledged.',
-    'resolved': 'Alert resolved.'
-  } %}
   {% if error is defined and error %}
-  <div class="flash-bar error" id="flash-error">
-    <i class="bi bi-exclamation-circle-fill"></i>
-    {{ flash_text.get(error, error) }}
-    <button class="close-btn" onclick="this.parentElement.remove()">×</button>
+  <div class="flash-bar error" role="alert">
+    <span>{{ msgs.flash_text.get(error, error) }}</span>
+    <button class="close-btn" type="button" aria-label="Dismiss" onclick="this.parentElement.remove()">&times;</button>
   </div>
   {% endif %}
   {% if info is defined and info %}
-  <div class="flash-bar success" id="flash-info">
-    <i class="bi bi-check-circle-fill"></i>
-    {{ flash_text.get(info, info) }}
-    <button class="close-btn" onclick="this.parentElement.remove()">×</button>
+  <div class="flash-bar success" role="status">
+    <span>{{ msgs.flash_text.get(info, info) }}</span>
+    <button class="close-btn" type="button" aria-label="Dismiss" onclick="this.parentElement.remove()">&times;</button>
   </div>
   {% endif %}
 
-  <!-- Toast container -->
-  <div id="toast-container"></div>
+  <div id="toast-container" aria-live="polite"></div>
 
-  <!-- Page content -->
-  <div class="page-body">
+  <div class="page-body" id="content" tabindex="-1">
     {% block content %}{% endblock %}
   </div>
-
-</main>
-</div><!-- .app-layout -->
+</div>
+</div>
 {% endblock %}

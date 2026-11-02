@@ -3,18 +3,18 @@
 {% block page_title %}
 <span style="display:flex;align-items:center;gap:10px">
   <a href="/devices" style="color:var(--text-3);font-size:13px;font-weight:400">Devices</a>
-  <i class="bi bi-chevron-right" style="color:var(--text-3);font-size:12px"></i>
+  
   {{ device.label or device.hostname or device.mac_address }}
 </span>
 {% endblock %}
 {% block content %}
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+<div class="two-col">
 
   <!-- Device info card -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-hdd-network" style="color:var(--accent)"></i>
+      
       <span class="card-header-title">Device Info</span>
       <span class="badge badge-{{ 'green' if device.state == 'APPROVED' else ('red' if device.state == 'BLOCKED' else 'yellow') }}" style="margin-left:auto">
         {{ device.state }}
@@ -37,15 +37,15 @@
       <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px">
         <span style="color:var(--text-3)">Randomised MAC</span>
         <span class="badge {{ 'badge-yellow' if device.is_random_mac else 'badge-green' }}">
-          {{ 'Yes ⚠️' if device.is_random_mac else 'No' }}
+          {{ 'Yes ' if device.is_random_mac else 'No' }}
         </span>
       </div>
     </div>
     <!-- Edit label -->
     <div class="card-footer">
       <form method="post" action="/devices/{{ device.device_id }}/label" style="display:flex;gap:8px;width:100%">
-        <input type="text" name="label" class="form-input" value="{{ device.label or '' }}" placeholder="Set a label…" />
-        <button type="submit" class="btn btn-secondary"><i class="bi bi-floppy"></i> Save</button>
+        <input aria-label="Set a label…" type="text" name="label" class="form-input" value="{{ device.label or '' }}" placeholder="Set a label…" />
+        <button type="submit" class="btn btn-secondary">Save</button>
       </form>
     </div>
   </div>
@@ -53,7 +53,7 @@
   <!-- Connection history -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-clock-history" style="color:var(--text-3)"></i>
+      
       <span class="card-header-title">Connection History</span>
     </div>
     <div style="padding:4px 0">
@@ -84,8 +84,8 @@
 {% if user.is_admin %}
 <form method="post" action="/devices/{{ device.device_id }}/owner"
       style="margin-top:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-  <label class="form-label" style="margin:0">Owner</label>
-  <select name="owner_id" class="form-select" style="max-width:220px">
+  <label class="form-label" style="margin:0" for="f-owner_id-1">Owner</label>
+  <select id="f-owner_id-1" name="owner_id" class="form-select" style="max-width:220px">
     <option value="">— No owner —</option>
     {% for m in members %}
     <option value="{{ m.member_id }}" {{ 'selected' if device.owner_member_id == m.member_id else '' }}>{{ m.username }}</option>
@@ -95,20 +95,63 @@
 </form>
 {% endif %}
 
+{% if user.is_admin %}
+<div class="card section">
+  <div class="card-header"><span class="card-header-title">Same device, more than one entry?</span></div>
+  <div class="card-body">
+    <p class="muted">Phones that change their hardware address show up as new devices. Merge the extra entry into this one: its usage and history move here, and Clarinet stops announcing that address as a new device.</p>
+    <form method="post" action="/devices/{{ device.device_id }}/merge" class="inline-form"
+          onsubmit="return confirm('Merge the chosen entry into this device? Its separate entry will be removed.')">
+      <select aria-label="Other id" name="other_id" class="form-select" required>
+        <option value="">Choose the entry to merge in</option>
+        {% for o in others %}
+        <option value="{{ o.device_id }}">{{ o.label or o.hostname or o.mac_address }} ({{ o.mac_address }})</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-secondary" type="submit">Merge into this device</button>
+    </form>
+    {% if aliases %}
+    <h4 style="margin-top:18px">Addresses merged into this device</h4>
+    <table class="cl-table">
+      <tbody>
+        {% for a in aliases %}
+        <tr>
+          <td><code>{{ a.mac_address }}</code> {% if a.former_label %}<span class="muted">was {{ a.former_label }}</span>{% endif %}</td>
+          <td class="num">
+            <form method="post" action="/devices/{{ device.device_id }}/split" style="display:inline">
+              <input type="hidden" name="mac" value="{{ a.mac_address }}">
+              <button class="btn btn-secondary btn-sm" type="submit">Split off</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+  {% if user.is_admin and device.state != 'GUEST' %}
+  <form method="post" action="/devices/{{ device.device_id }}/guest"
+        onsubmit="return confirm('Treat this device as a guest? It will have internet only.')">
+    <button class="btn btn-secondary">Mark as guest</button>
+  </form>
+  {% endif %}
   {% if device.state != 'BLOCKED' %}
   <form method="post" action="/devices/{{ device.device_id }}/block"
         onsubmit="return confirm('Block this device?')">
-    <button class="btn btn-danger"><i class="bi bi-slash-circle"></i> Block Device</button>
+    <button class="btn btn-danger">Block Device</button>
   </form>
   {% endif %}
   {% if device.state != 'APPROVED' %}
   <form method="post" action="/devices/{{ device.device_id }}/approve">
-    <button class="btn btn-success"><i class="bi bi-check-lg"></i> Approve Device</button>
+    <button class="btn btn-success">Approve Device</button>
   </form>
   {% endif %}
   <a href="/rules?device={{ device.device_id }}" class="btn btn-secondary">
-    <i class="bi bi-clock"></i> Add Time Rule
+    Add Time Rule
   </a>
 </div>
 {% endblock %}

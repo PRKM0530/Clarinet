@@ -12,34 +12,34 @@
   <!-- Request form -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-rocket" style="color:var(--accent)"></i>
+      
       <span class="card-header-title">Request Priority</span>
     </div>
     <div class="card-body">
       <form method="post" action="/priority/request">
         <div class="form-group">
-          <label class="form-label">Device</label>
-          <select name="device_id" class="form-select" required>
+          <label class="form-label" for="f-device_id-1">Device</label>
+          <select id="f-device_id-1" name="device_id" class="form-select" required>
             {% for d in my_devices %}
             <option value="{{ d.device_id }}">{{ d.label or d.hostname or d.mac_address }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Duration (minutes)</label>
-          <select name="duration_min" class="form-select">
-            <option value="30">30 minutes</option>
-            <option value="60" selected>1 hour</option>
-            <option value="120">2 hours</option>
-            <option value="240">4 hours</option>
+          <label class="form-label" for="f-duration_min-1">Duration (minutes)</label>
+          <select id="f-duration_min-1" name="duration_min" class="form-select">
+            {% for m in [15, 30, 60, 120, 240, 480] if m <= policy.max_duration_min %}
+            <option value="{{ m }}" {{ 'selected' if m == policy.default_duration_min else '' }}>{{ (m ~ ' minutes') if m < 60 else ((m // 60) ~ (' hour' if m == 60 else ' hours')) }}</option>
+            {% endfor %}
           </select>
+          <div class="form-hint">Up to {{ policy.max_duration_min }} minutes at a time, {{ policy.daily_limit_min }} minutes a day.</div>
         </div>
         <div class="form-group">
-          <label class="form-label">Reason</label>
-          <textarea name="reason" class="form-textarea" rows="2" placeholder="e.g. Video call at 6 PM"></textarea>
+          <label class="form-label" for="f-reason-1">Reason</label>
+          <textarea id="f-reason-1" name="reason" class="form-textarea" rows="2" placeholder="e.g. Video call at 6 PM"></textarea>
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%">
-          <i class="bi bi-rocket"></i> Request Priority
+          Request Priority
         </button>
       </form>
     </div>
@@ -48,7 +48,7 @@
   <!-- Grants table -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-list-check" style="color:var(--text-3)"></i>
+      
       <span class="card-header-title">All Requests</span>
     </div>
     <div class="table-wrap">
@@ -72,10 +72,10 @@
               {% if user.is_admin and g.decision == 'PENDING' %}
               <div style="display:flex;gap:4px">
                 <form method="post" action="/priority/{{ g.grant_id }}/approve">
-                  <button class="btn btn-success btn-sm btn-icon" title="Approve"><i class="bi bi-check-lg"></i></button>
+                  <button class="btn btn-success btn-sm btn-icon" title="Approve">Approve</button>
                 </form>
                 <form method="post" action="/priority/{{ g.grant_id }}/deny">
-                  <button class="btn btn-danger btn-sm btn-icon" title="Deny"><i class="bi bi-x-lg"></i></button>
+                  <button class="btn btn-danger btn-sm btn-icon" title="Deny">Deny</button>
                 </form>
               </div>
               {% endif %}
@@ -84,7 +84,7 @@
           {% else %}
           <tr><td colspan="6">
             <div class="empty-state">
-              <i class="bi bi-rocket"></i>
+              
               <h4>No requests yet</h4>
             </div>
           </td></tr>
@@ -95,4 +95,21 @@
   </div>
 
 </div>
+{% if user.is_admin %}
+<div class="card section">
+  <div class="card-header"><span class="card-header-title">Priority rules</span></div>
+  <form method="post" action="/priority/policy" class="card-body">
+    <p class="muted">These limits decide every priority request. Each member's minutes are counted per day.</p>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label" for="f-default_duration_min-1">Default length (minutes)</label>
+        <input id="f-default_duration_min-1" type="number" name="default_duration_min" class="form-input" min="1" max="1440" value="{{ policy.default_duration_min }}" required></div>
+      <div class="form-group"><label class="form-label" for="f-max_duration_min-1">Longest single request (minutes)</label>
+        <input id="f-max_duration_min-1" type="number" name="max_duration_min" class="form-input" min="1" max="1440" value="{{ policy.max_duration_min }}" required></div>
+      <div class="form-group"><label class="form-label" for="f-daily_limit_min-1">Most minutes per member per day</label>
+        <input id="f-daily_limit_min-1" type="number" name="daily_limit_min" class="form-input" min="1" max="1440" value="{{ policy.daily_limit_min }}" required></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Save rules</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

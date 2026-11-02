@@ -9,7 +9,7 @@
       <p>Schedule internet access restrictions per device.</p>
     </div>
     <button class="btn btn-primary" onclick="openModal('create-rule-modal')">
-      <i class="bi bi-plus"></i> New Rule
+      New Rule
     </button>
   </div>
 </div>
@@ -50,20 +50,14 @@
           <td style="text-align:right;padding-right:14px">
             <div style="display:flex;gap:4px;justify-content:flex-end">
               <form method="post" action="/rules/{{ r.rule_id }}/exception">
-                <button class="btn btn-ghost btn-sm btn-icon" title="Grant 1-hour exception">
-                  <i class="bi bi-clock"></i>
-                </button>
+                <button class="btn btn-ghost btn-sm btn-icon" title="Grant 1-hour exception">Grant 1-hour exception</button>
               </form>
               <form method="post" action="/rules/{{ r.rule_id }}/toggle">
-                <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Pause' if r.active else 'Resume' }}">
-                  <i class="bi bi-{{ 'pause-fill' if r.active else 'play-fill' }}"></i>
-                </button>
+                <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Pause' if r.active else 'Resume' }}">{{ 'Pause' if r.active else 'Resume' }}</button>
               </form>
               <form method="post" action="/rules/{{ r.rule_id }}/delete"
                     onsubmit="return confirm('Delete this rule?')">
-                <button class="btn btn-danger btn-sm btn-icon" title="Delete">
-                  <i class="bi bi-trash3"></i>
-                </button>
+                <button class="btn btn-danger btn-sm btn-icon" title="Delete">Delete</button>
               </form>
             </div>
           </td>
@@ -71,7 +65,7 @@
         {% else %}
         <tr><td colspan="7">
           <div class="empty-state">
-            <i class="bi bi-clock"></i>
+            
             <h4>No time rules yet</h4>
             <p>Create a rule to restrict a device's internet access on a schedule.</p>
           </div>
@@ -92,8 +86,8 @@
     <form method="post" action="/rules/create">
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">Device</label>
-          <select name="device_id" class="form-select" required>
+          <label class="form-label" for="f-device_id-1">Device</label>
+          <select id="f-device_id-1" name="device_id" class="form-select" required>
             {% for d in devices %}
             <option value="{{ d.device_id }}">{{ d.label or d.hostname or d.mac_address }}</option>
             {% endfor %}
@@ -112,29 +106,29 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Start time</label>
-            <input type="time" name="start_time" class="form-input" value="22:00" required />
+            <label class="form-label" for="f-start_time-1">Start time</label>
+            <input id="f-start_time-1" type="time" name="start_time" class="form-input" value="22:00" required />
           </div>
           <div class="form-group">
-            <label class="form-label">End time</label>
-            <input type="time" name="end_time" class="form-input" value="07:00" required />
+            <label class="form-label" for="f-end_time-1">End time</label>
+            <input id="f-end_time-1" type="time" name="end_time" class="form-input" value="07:00" required />
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Action</label>
+          <label class="form-label" for="rule-action">Action</label>
           <select name="action" class="form-select" id="rule-action">
             <option value="BLOCK">Block — no internet</option>
             <option value="RATE_LIMIT">Rate limit — slow down</option>
           </select>
         </div>
         <div class="form-group" id="rate-field" style="display:none">
-          <label class="form-label">Rate limit (kbps)</label>
-          <input type="number" name="rate_kbps" class="form-input" placeholder="e.g. 512" min="64" />
+          <label class="form-label" for="f-rate_kbps-1">Rate limit (kbps)</label>
+          <input id="f-rate_kbps-1" type="number" name="rate_kbps" class="form-input" placeholder="e.g. 512" min="64" />
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal('create-rule-modal')">Cancel</button>
-        <button type="submit" class="btn btn-primary"><i class="bi bi-plus"></i> Create Rule</button>
+        <button type="submit" class="btn btn-primary">Create Rule</button>
       </div>
     </form>
   </div>

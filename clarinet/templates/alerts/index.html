@@ -40,12 +40,12 @@
             <div style="display:flex;gap:4px;justify-content:flex-end">
               {% if a.status == 'OPEN' %}
               <form method="post" action="/alerts/{{ a.alert_id }}/ack">
-                <button class="btn btn-ghost btn-sm btn-icon" title="Acknowledge"><i class="bi bi-eye"></i></button>
+                <button class="btn btn-ghost btn-sm btn-icon" title="Acknowledge">Acknowledge</button>
               </form>
               {% endif %}
               {% if a.status != 'RESOLVED' %}
               <form method="post" action="/alerts/{{ a.alert_id }}/resolve">
-                <button class="btn btn-success btn-sm btn-icon" title="Resolve"><i class="bi bi-check-lg"></i></button>
+                <button class="btn btn-success btn-sm btn-icon" title="Resolve">Resolve</button>
               </form>
               {% endif %}
             </div>
@@ -54,7 +54,7 @@
         {% else %}
         <tr><td colspan="7">
           <div class="empty-state">
-            <i class="bi bi-check-circle" style="color:var(--green)"></i>
+            
             <h4>No alerts</h4>
             <p>Your network is running smoothly.</p>
           </div>

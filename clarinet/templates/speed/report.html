@@ -1,0 +1,54 @@
+{% extends "base_app.html" %}
+{% block title %}Speed report{% endblock %}
+{% block page_title %}Speed report{% endblock %}
+{% block content %}
+<div class="toolbar no-print">
+  <a href="/speed" class="btn btn-secondary btn-sm">&larr; Speed tests</a>
+  <span class="toolbar-spacer"></span>
+  {% for d in (7, 30, 90) %}
+  <a href="/speed/report?days={{ d }}" class="btn {{ 'btn-primary' if report.days == d else 'btn-secondary' }} btn-sm">{{ d }} days</a>
+  {% endfor %}
+  <button class="btn btn-secondary btn-sm" onclick="window.print()">Print</button>
+</div>
+
+<div class="document">
+  <h2>Internet speed report</h2>
+  <p class="muted">
+    {{ report.start.strftime('%d %b %Y') }} to {{ report.end.strftime('%d %b %Y') }}
+    &middot; created {{ generated.strftime('%d %b %Y %H:%M') }} UTC
+  </p>
+
+  <table class="facts">
+    <tr><th>Plan (download / upload)</th><td>{{ '%g'|format(report.plan_download) }} / {{ '%g'|format(report.plan_upload) }} Mbps</td></tr>
+    <tr><th>Counted as below plan</th><td>Under {{ report.threshold_pct }}% of the download speed</td></tr>
+    <tr><th>Tests used</th><td>{{ report.tests|length }}{% if report.busy_excluded %} ({{ report.busy_excluded }} more left out because the network was busy){% endif %}</td></tr>
+    {% if report.tests %}
+    <tr><th>Download, average</th><td>{{ report.avg_download }} Mbps{% if report.avg_download_pct is not none %} ({{ report.avg_download_pct }}% of plan){% endif %}</td></tr>
+    <tr><th>Download, lowest / highest</th><td>{{ report.min_download }} / {{ report.max_download }} Mbps</td></tr>
+    <tr><th>Upload, average</th><td>{{ report.avg_upload }} Mbps</td></tr>
+    {% endif %}
+  </table>
+
+  <p class="verdict {{ 'verdict-bad' if report.often_below else '' }}">{{ report.verdict() }}</p>
+
+  {% if report.tests %}
+  <table class="cl-table">
+    <thead><tr><th>Date (UTC)</th><th class="num">Download</th><th class="num">% of plan</th><th class="num">Upload</th><th class="num">Latency</th><th>Server</th></tr></thead>
+    <tbody>
+      {% for t in report.tests %}
+      {% set pct = report.pct_of_plan(t) %}
+      <tr>
+        <td>{{ t.tested_at.strftime('%d %b %Y %H:%M') }}</td>
+        <td class="num">{{ t.download_mbps|round(1) }} Mbps</td>
+        <td class="num {{ 'text-bad' if pct is not none and pct < report.threshold_pct else '' }}">{{ pct if pct is not none else '-' }}{{ '%' if pct is not none }}</td>
+        <td class="num">{{ t.upload_mbps|round(1) }} Mbps</td>
+        <td class="num">{{ t.latency_ms|round(0)|int }} ms</td>
+        <td>{{ t.server_host or '-' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <p class="muted small">Speeds were measured from the Clarinet device on the home network to an internet test server.</p>
+</div>
+{% endblock %}

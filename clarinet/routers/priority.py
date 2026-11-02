@@ -27,10 +27,25 @@ from clarinet.models import Device, PriorityGrant
 
 router = APIRouter(prefix="/priority", tags=["priority"])
 
-# Policy constants (FAIR-2, FAIR-5)
+# Policy defaults (FAIR-2, FAIR-5). The admin can change them on the Priority page (FAIR-6).
 _DEFAULT_DURATION_MIN = 60
 _MAX_DURATION_MIN = 120
 _DAILY_CREDIT_LIMIT_MIN = 180   # max priority minutes per member per day
+
+
+def get_policy(db) -> dict:
+    """The current priority policy: defaults unless the admin has changed them."""
+    from clarinet.app_settings import get_setting
+
+    def number(key: str, default: int) -> int:
+        raw = get_setting(db, key, str(default))
+        return int(raw) if raw and raw.isdigit() else default
+
+    return {
+        "default_duration_min": number("priority.default_duration_min", _DEFAULT_DURATION_MIN),
+        "max_duration_min": number("priority.max_duration_min", _MAX_DURATION_MIN),
+        "daily_limit_min": number("priority.daily_limit_min", _DAILY_CREDIT_LIMIT_MIN),
+    }
 
 
 def _get_plan_kbps(db) -> int:
@@ -80,12 +95,13 @@ def _auto_decide(db, member_id: int, device_id: int, duration_min: int) -> tuple
         return "DENIED", "You already have an active priority grant."
 
     # Fairness credit check
+    daily_limit = get_policy(db)["daily_limit_min"]
     used_today = _fairness_credit_today(db, member_id)
-    if used_today + duration_min > _DAILY_CREDIT_LIMIT_MIN:
-        remaining = max(0, _DAILY_CREDIT_LIMIT_MIN - used_today)
+    if used_today + duration_min > daily_limit:
+        remaining = max(0, daily_limit - used_today)
         return "DENIED", (
             f"Daily priority limit reached. "
-            f"You have used {used_today} of {_DAILY_CREDIT_LIMIT_MIN} minutes today. "
+            f"You have used {used_today} of {daily_limit} minutes today. "
             f"You can request up to {remaining} more minute(s) today."
         )
 
@@ -140,8 +156,9 @@ def priority_page(request: Request, db: Session = Depends(get_db)):
         "mode": mode,
         "mode_available": mode == "FULL",
         "used_today_min": used_today,
-        "daily_limit_min": _DAILY_CREDIT_LIMIT_MIN,
-        "default_duration_min": _DEFAULT_DURATION_MIN,
+        "daily_limit_min": get_policy(db)["daily_limit_min"],
+        "default_duration_min": get_policy(db)["default_duration_min"],
+        "policy": get_policy(db),
         "now": now,
         "error": request.query_params.get("error"),
         "info": request.query_params.get("info"),
@@ -172,7 +189,7 @@ def request_priority(
     if not user.is_admin and device.owner_member_id != user.member_id:
         return RedirectResponse(url="/priority?error=You+can+only+request+priority+for+your+own+devices", status_code=302)
 
-    duration_min = max(1, min(duration_min, _MAX_DURATION_MIN))
+    duration_min = max(1, min(duration_min, get_policy(db)["max_duration_min"]))
 
     # Auto policy decision (F-07b fix)
     decision, policy_reason = _auto_decide(db, user.member_id, device_id, duration_min)
@@ -334,3 +351,31 @@ def priority_summary(request: Request, db: Session = Depends(get_db)):
         "active_grants": active,
         "pending_requests": pending,
     })
+
+
+@router.post("/policy")
+def update_policy(
+    request: Request,
+    default_duration_min: str = Form(""),
+    max_duration_min: str = Form(""),
+    daily_limit_min: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """FAIR-6: the admin changes the limits that decide priority requests."""
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+
+    values = {"default_duration_min": default_duration_min, "max_duration_min": max_duration_min,
+              "daily_limit_min": daily_limit_min}
+    if not all(v.strip().isdigit() and 1 <= int(v) <= 1440 for v in values.values()):
+        return RedirectResponse(url="/priority?error=bad_policy", status_code=302)
+    default_m, max_m, daily_m = (int(values[k]) for k in ("default_duration_min", "max_duration_min", "daily_limit_min"))
+    if not (default_m <= max_m <= daily_m):
+        return RedirectResponse(url="/priority?error=bad_policy_order", status_code=302)
+
+    from clarinet.app_settings import set_setting
+    for key, value in values.items():
+        set_setting(db, f"priority.{key}", str(int(value)))
+    audit(db, result.member_id, "UPDATE_PRIORITY_POLICY", detail={k: int(v) for k, v in values.items()})
+    return RedirectResponse(url="/priority?info=policy_saved", status_code=302)

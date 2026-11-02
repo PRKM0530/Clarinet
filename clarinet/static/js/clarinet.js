@@ -7,7 +7,8 @@
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 
-const WS_URL = `ws://${location.host}/ws/alerts`;
+// wss on https pages: browsers block plain ws from a secure page, which would silently stop live alerts
+const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/alerts`;
 let ws = null;
 let wsReconnectTimeout = null;
 
@@ -56,6 +57,33 @@ function onAlert(data) {
   browserNotify(data);
 }
 
+// Current mode and the counts shown next to Alerts and Devices in the sidebar
+function setBadge(href, count, extraClass) {
+  const link = document.querySelector(`#sidebar a[href="${href}"]`);
+  if (!link) return;
+  let badge = link.querySelector('.sidebar-badge, .sidebar-badge-warn');
+  if (!count) { badge?.remove(); return; }
+  if (!badge) {
+    badge = document.createElement('span');
+    link.appendChild(badge);
+  }
+  badge.className = extraClass || 'sidebar-badge';
+  badge.textContent = count;
+}
+
+function loadStatus() {
+  fetch('/api/status/topbar', { credentials: 'same-origin' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(s => {
+      if (!s) return;
+      const mode = document.getElementById('mode-label');
+      if (mode && s.mode_word) mode.textContent = s.mode_word;
+      setBadge('/alerts', s.open_alerts, 'sidebar-badge');
+      if (s.new_devices !== null && s.new_devices !== undefined) setBadge('/devices', s.new_devices, 'sidebar-badge-warn');
+    })
+    .catch(() => { /* the page works without it */ });
+}
+
 // Browser notifications (DASH-3): shown while the dashboard is open, in addition to the toast.
 // Browsers only allow asking for permission after a click, so ask once, on the first click.
 function browserNotify(data) {
@@ -92,7 +120,6 @@ function bumpAlertBadge() {
 
 // ── Toast system ──────────────────────────────────────────────────────────────
 
-const ICONS = { CRITICAL: 'bi-exclamation-octagon-fill', WARNING: 'bi-exclamation-triangle-fill', INFO: 'bi-info-circle-fill' };
 const CLASSES = { CRITICAL: 'toast-danger', WARNING: 'toast-warning', INFO: 'toast-info' };
 
 function showToast(data) {
@@ -100,18 +127,16 @@ function showToast(data) {
   if (!container) return;
 
   const level   = data.level ?? 'INFO';
-  const icon    = ICONS[level]  ?? ICONS.INFO;
   const cls     = CLASSES[level] ?? CLASSES.INFO;
 
   const el = document.createElement('div');
   el.className = `toast ${cls}`;
   el.innerHTML = `
-    <i class="bi ${icon} toast-icon"></i>
     <div class="toast-body">
       <div class="toast-title">${esc(data.title)}</div>
       <div class="toast-msg">${esc(data.message ?? '')}</div>
     </div>
-    <button class="toast-close" onclick="this.closest('.toast').remove()">×</button>`;
+    <button class="toast-close" type="button" aria-label="Dismiss" onclick="this.closest('.toast').remove()">&times;</button>`;
 
   container.appendChild(el);
   setTimeout(() => el.style.opacity = '0', 7_000);
@@ -136,5 +161,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Start WS only on authenticated pages
-  if (document.getElementById('ws-indicator')) wsConnect();
+  if (document.getElementById('ws-indicator')) {
+    wsConnect();
+    loadStatus();
+    setInterval(loadStatus, 60_000);
+  }
 });

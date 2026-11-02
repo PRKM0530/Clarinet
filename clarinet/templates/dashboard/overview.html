@@ -7,47 +7,49 @@
 <!-- Stat grid -->
 <div class="stat-grid">
   <div class="stat-card stat-blue">
-    <div class="stat-label"><i class="bi bi-hdd-network"></i> Total Devices</div>
+    <div class="stat-label">Total devices</div>
     <div class="stat-value">{{ total_devices }}</div>
     <div class="stat-meta">{{ online_devices }} online now</div>
   </div>
+  {% if user.is_admin %}
   <div class="stat-card stat-orange">
-    <div class="stat-label"><i class="bi bi-hourglass-split"></i> Awaiting Approval</div>
-    <div class="stat-value">{{ new_devices if new_devices is not none else "—" }}</div>
+    <div class="stat-label">Awaiting approval</div>
+    <div class="stat-value">{{ new_devices or 0 }}</div>
     <div class="stat-meta">
-      {% if new_devices %}<a href="/devices" style="color:var(--orange);font-size:12px">Review →</a>{% else %}All clear{% endif %}
+      {% if new_devices %}<a href="/devices">Review devices</a>{% else %}None waiting{% endif %}
     </div>
   </div>
+  {% endif %}
   <div class="stat-card stat-red">
-    <div class="stat-label"><i class="bi bi-bell"></i> Open Alerts</div>
+    <div class="stat-label">Open alerts</div>
     <div class="stat-value">{{ open_alerts }}</div>
     <div class="stat-meta">
-      {% if open_alerts %}<a href="/alerts" style="color:var(--red);font-size:12px">View →</a>{% else %}No issues{% endif %}
+      {% if open_alerts %}<a href="/alerts">View alerts</a>{% else %}No issues{% endif %}
     </div>
   </div>
   {% if latest_speed %}
   <div class="stat-card stat-green">
-    <div class="stat-label"><i class="bi bi-cloud-arrow-down"></i> Download</div>
+    <div class="stat-label">Download</div>
     <div class="stat-value">{{ latest_speed.download_mbps|round(0)|int }} <small>Mbps</small></div>
     <div class="stat-meta">Upload {{ latest_speed.upload_mbps|round(0)|int }} Mbps</div>
   </div>
   <div class="stat-card {% if avg_latency and avg_latency > 80 %}stat-orange{% else %}stat-teal{% endif %}">
-    <div class="stat-label"><i class="bi bi-activity"></i> Latency</div>
-    <div class="stat-value">{{ avg_latency|round(0)|int if avg_latency else '—' }} <small>ms</small></div>
+    <div class="stat-label">Latency</div>
+    <div class="stat-value">{% if avg_latency %}{{ avg_latency|round(0)|int }} <small>ms</small>{% else %}n/a{% endif %}</div>
     <div class="stat-meta">Avg over last hour</div>
   </div>
   {% endif %}
   <div class="stat-card stat-purple">
-    <div class="stat-label"><i class="bi bi-database"></i> Usage Today</div>
-    <div class="stat-value">{{ (today_traffic_mb or 0)|round(0)|int }} <small>MB</small></div>
+    <div class="stat-label">Usage today</div>
+    <div class="stat-value">{{ ((today_traffic_mb or 0) * 1048576)|size }}</div>
     <div class="stat-meta">{{ "All devices combined" if user.is_admin else "Your devices" }}</div>
   </div>
   {% if limit %}
   {% set pct = ((limit.pct_used or 0) * 100)|round(0)|int %}
   <div class="stat-card {{ 'stat-red' if pct >= 90 else ('stat-orange' if pct >= 70 else 'stat-teal') }}">
-    <div class="stat-label"><i class="bi bi-speedometer2"></i> Monthly Data</div>
+    <div class="stat-label">Monthly data</div>
     <div class="stat-value">{{ pct }}<small>%</small></div>
-    <div class="stat-meta">{{ limit.gb_used }} of {{ (limit.bytes_limit / 1073741824)|round(0)|int }} GB · {{ limit.days_remaining }} days left</div>
+    <div class="stat-meta">{{ limit.bytes_used|size }} of {{ limit.bytes_limit|size }} · {{ limit.days_remaining }} days left</div>
   </div>
   {% endif %}
 </div>
@@ -55,7 +57,7 @@
 <!-- Active slowdown alert -->
 {% if active_slowdown %}
 <div class="slowdown-banner">
-  <div class="slowdown-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+  <div class="slowdown-banner-icon"></div>
   <div>
     <div style="font-size:14px;font-weight:600;color:var(--red)">Slowdown detected</div>
     <div style="font-size:13px;color:var(--text-2);margin-top:2px">
@@ -67,12 +69,12 @@
 </div>
 {% endif %}
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+<div class="two-col">
 
   <!-- Recent alerts -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-bell" style="color:var(--text-3)"></i>
+      
       <span class="card-header-title">Recent Alerts</span>
       <a href="/alerts" class="card-header-sub">View all →</a>
     </div>
@@ -102,7 +104,7 @@
     </table>
     {% else %}
     <div class="empty-state">
-      <i class="bi bi-check-circle" style="color:var(--green)"></i>
+      
       <h4>No open alerts</h4>
       <p>Your network looks healthy.</p>
     </div>
@@ -112,8 +114,8 @@
   <!-- Recent devices -->
   <div class="card">
     <div class="card-header">
-      <i class="bi bi-hdd-network" style="color:var(--text-3)"></i>
-      <span class="card-header-title">Recent Devices</span>
+      
+      <span class="card-header-title">Busiest devices today</span>
       <a href="/devices" class="card-header-sub">View all →</a>
     </div>
     {% if top_devices %}
@@ -121,13 +123,6 @@
       <tbody>
         {% for d in top_devices %}
         <tr>
-          <td style="width:36px;padding:10px 0 10px 14px">
-            <div style="width:30px;height:30px;border-radius:50%;background:var(--surface-3);display:flex;align-items:center;justify-content:center;font-size:14px">
-              {% if 'phone' in (d.vendor or '').lower() or 'apple' in (d.vendor or '').lower() %}📱
-              {% elif 'intel' in (d.vendor or '').lower() or 'laptop' in (d.label or '').lower() %}💻
-              {% else %}📡{% endif %}
-            </div>
-          </td>
           <td>
             <div style="font-size:13px;font-weight:500">
               {{ d.label or d.hostname or (d.mac_address[:14]+'…') }}
@@ -135,7 +130,7 @@
             <div style="font-size:11.5px;color:var(--text-3)">{{ d.vendor or d.mac_address }}</div>
           </td>
           <td style="text-align:right;padding-right:14px">
-            <div style="font-size:12px;font-weight:600;color:var(--text)">{{ ((d.total or 0) / 1_048_576) | round(1) }} MB</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text)">{{ (d.total or 0)|size }}</div>
             <span class="badge badge-{{ 'green' if d.state == 'APPROVED' else ('red' if d.state == 'BLOCKED' else ('yellow' if d.state == 'NEW' else 'blue')) }}">
               {{ d.state }}
             </span>
@@ -146,7 +141,7 @@
     </table>
     {% else %}
     <div class="empty-state">
-      <i class="bi bi-hdd-network"></i>
+      
       <h4>No devices yet</h4>
       <p>Start the collector on Linux to discover devices.</p>
     </div>

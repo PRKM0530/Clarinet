@@ -126,6 +126,10 @@ def retention_traffic_days(db: Session) -> int:
     return _get_int(db, "retention.traffic_days", 90)
 
 
+def retention_domain_days(db: Session) -> int:
+    return _get_int(db, "retention.domain_days", 7)
+
+
 def retention_samples_hours(db: Session) -> int:
     return _get_int(db, "retention.samples_hours", 24)
 
