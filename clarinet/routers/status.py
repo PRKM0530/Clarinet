@@ -40,19 +40,20 @@ def topbar_api(request: Request, db: Session = Depends(get_db)):
 
     from clarinet.app_settings import get_setting
     from clarinet.core_svc.mode import parse_mode, mode_word, network_word
-    from clarinet.models import Alert
+    from clarinet.core_svc.permissions import visible_alerts
 
     raw_mode = get_setting(db, "network_mode") or "MONITOR"
     mode = parse_mode(raw_mode)
 
+    from clarinet.models import Alert
     open_alerts = (
-        db.query(Alert)
+        visible_alerts(db, user)
         .filter(Alert.status == "OPEN")
         .count()
     )
 
     recent_alerts = (
-        db.query(Alert)
+        visible_alerts(db, user)
         .filter(Alert.status == "OPEN")
         .order_by(Alert.raised_at.desc())
         .limit(5)

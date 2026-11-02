@@ -11,16 +11,13 @@ sqlalchemy==2.0.36
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1              # passlib 1.7.4 breaks with bcrypt 5
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
 
 # ── Scheduler (rules, summaries, voucher expiry) ───────────────────────────────
 apscheduler==3.10.4
-
-# ── Analytics ──────────────────────────────────────────────────────────────────
-pandas==2.2.3
-numpy==2.1.3
 
 # ── Network probing ────────────────────────────────────────────────────────────
 dnspython==2.7.0
@@ -31,7 +28,8 @@ websockets==13.1
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Linux-only — uncomment after deploying to Ubuntu 24.04
-# scapy==2.6.1             # ARP scan, passive sniff
+# scapy==2.6.1             # ARP scan, passive sniff, port-scan detection
+# netifaces==0.11.0        # finds the subnet of the network interface for ARP scans
 # zeroconf==0.136.2        # mDNS device names
 # python-nftables==0.1.2   # nftables (blocking / vouchers)
 # ──────────────────────────────────────────────────────────────────────────────

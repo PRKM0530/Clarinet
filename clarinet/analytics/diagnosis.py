@@ -313,7 +313,7 @@ def _format_alert(event_kind: str, causes: list[dict], raw: dict) -> tuple[str, 
     evidence = top.get("evidence", "")
     suggestion = top.get("suggestion", "")
 
-    if event_kind == "INTERNET_OUTAGE":
+    if event_kind in ("OUTAGE", "INTERNET_OUTAGE") or cause_name == "INTERNET_OUTAGE":
         title = "Your internet connection seems to be down"
     elif cause_name == "ONE_DEVICE_HEAVY":
         title = "One device is slowing down the network"

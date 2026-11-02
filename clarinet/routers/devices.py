@@ -93,23 +93,12 @@ def device_detail(device_id: int, request: Request, db: Session = Depends(get_db
         .all()
     )
 
-    # Fetch M2 rules (graceful failure per C-08)
-    m2_rules = None
-    try:
-        import httpx
-        resp = httpx.get(f"http://localhost:8000/api/rules/device/{device_id}", timeout=1.0)
-        if resp.status_code == 200:
-            m2_rules = resp.json()
-    except Exception:
-        pass
-
     return templates.TemplateResponse("devices/detail.html", {
         "request": request,
         "user": user,
         "page": "devices",
         "device": device,
         "history": history,
-        "m2_rules": m2_rules,
         "info": request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })

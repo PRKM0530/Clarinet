@@ -1,274 +1,167 @@
 """
 tests/m3_performance/test_diagnosis.py
-Unit tests for clarinet.analytics.diagnosis
+Tests for clarinet.analytics.diagnosis, run against a real (in-memory) database.
 
 AT-09.1  No slowdown event when latency is normal
-AT-09.2  2-minute hold-down: single spike does NOT open an event (MIN_BAD_SAMPLES=2)
-AT-09.3  INTERNET_OUTAGE cause when router is unreachable (packet_loss=1.0)
-AT-09.4  Diagnosis classify helpers: _build_causes returns INTERNET_OUTAGE / SLOWDOWN
-AT-09.5  Plain-language text has no technical jargon
-AT-09.6  Open event gets ended_at when network recovers
+AT-09.2  2-minute hold-down: a single bad sample does NOT open an event
+AT-09.3  A real slowdown opens a WARNING event; a full outage opens a CRITICAL one
+AT-09.5  Plain-language alert text has no technical jargon, and an outage says so
+AT-09.6  An open event gets ended_at when the network recovers
 """
 from __future__ import annotations
 
-import json
-import pytest
-from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-from unittest.mock import MagicMock, patch, call
 
-from clarinet.analytics.diagnosis import (
-    MIN_BAD_SAMPLES,
-    _format_alert,
-    check_slowdown,
-)
-from clarinet.models import SlowdownEvent
+import pytest
+
+import clarinet.analytics.diagnosis as diag
+from clarinet.analytics.diagnosis import MIN_BAD_SAMPLES, _format_alert, check_slowdown
+from clarinet.models import Alert, SlowdownEvent
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _make_ping(avg_ms=20.0, packet_loss=0.0, reachable=True):
-    """Return a mock PingResult-like object."""
-    m = MagicMock()
-    m.avg_ms = avg_ms
-    m.packet_loss = packet_loss
-    m.reachable = reachable
-    return m
+def ping(avg_ms=20.0, packet_loss=0.0, reachable=True):
+    return SimpleNamespace(avg_ms=avg_ms, packet_loss=packet_loss, reachable=reachable)
 
 
-def _ping_results(internet_ms=20.0, internet_loss=0.0, internet_up=True,
-                  router_ms=5.0, router_up=True):
+def pings(internet_ms=20.0, internet_loss=0.0, internet_up=True, router_ms=5.0):
     return {
-        "google_dns": _make_ping(internet_ms, internet_loss, internet_up),
-        "router": _make_ping(router_ms, 0.0, router_up),
+        "google_dns": ping(internet_ms, internet_loss, internet_up),
+        "router": ping(router_ms),
     }
 
 
-def _make_session_context(mock_db):
-    """Return a context manager mock that yields mock_db."""
-    cm = MagicMock()
-    cm.__enter__ = MagicMock(return_value=mock_db)
-    cm.__exit__ = MagicMock(return_value=False)
-    return cm
+BASELINE = SimpleNamespace(avg_latency_ms=30.0, std_latency_ms=5.0)
 
 
-# ── AT-09.1 ───────────────────────────────────────────────────────────────────
+@pytest.fixture()
+def run(db):
+    """
+    check_slowdown(pings) wired to the test database, with the baseline fixed at
+    30 ms. Anything above 2x that counts as elevated.
+    """
+    diag._consecutive_bad = 0
+    session_factory = MagicMock()
+    session_factory.return_value.__enter__ = MagicMock(return_value=db)
+    session_factory.return_value.__exit__ = MagicMock(return_value=False)
 
-def test_no_event_when_latency_normal(db):
-def test_no_event_when_latency_normal():
-    """No SlowdownEvent is created when latency is within baseline."""
-    from clarinet.analytics.diagnosis import _consecutive_bad  # noqa: F401
-    import clarinet.analytics.diagnosis as diag_mod
-    diag_mod._consecutive_bad = 0
-
-    # Baseline avg=30, current=35 — well within 2× threshold
-    mock_baseline = MagicMock()
-    mock_baseline.avg_latency_ms = 30.0
-    mock_baseline.std_latency_ms = 5.0
-
-    pings = _ping_results(internet_ms=35.0, internet_loss=0.0)
-
-    with patch("clarinet.analytics.diagnosis.SessionLocal") as mock_sl, \
-         patch("clarinet.analytics.diagnosis.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.diagnosis.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.diagnosis.latency_is_elevated", return_value=False), \
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = None
-
-    with patch("clarinet.database.SessionLocal", return_value=_make_session_context(mock_db)), \
+    with patch("clarinet.database.SessionLocal", session_factory), \
          patch("clarinet.analytics.baseline.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.baseline.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.baseline.latency_is_elevated", return_value=False), \
+         patch("clarinet.analytics.baseline.get_baseline_for_now", return_value=BASELINE), \
+         patch("clarinet.analytics.baseline.latency_is_elevated",
+               side_effect=lambda ms, baseline, multiplier=2.0: ms > baseline.avg_latency_ms * multiplier), \
          patch("clarinet.analytics.diagnosis._speed_below_plan_check", return_value=False):
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_sl.return_value.__enter__ = MagicMock(return_value=mock_db)
-        mock_sl.return_value.__exit__ = MagicMock(return_value=False)
-
-        check_slowdown(pings)
-
-        # commit should NOT have been called with a new event
-        mock_db.add.assert_not_called()
-
-    diag_mod._consecutive_bad = 0
+        yield check_slowdown
+    diag._consecutive_bad = 0
 
 
-# ── AT-09.2 ───────────────────────────────────────────────────────────────────
+def events(db):
+    return db.query(SlowdownEvent).all()
+
+
+def alerts(db):
+    return db.query(Alert).all()
+
+
+# AT-09.1
+
+def test_no_event_when_latency_normal(run, db):
+    for _ in range(MIN_BAD_SAMPLES + 2):
+        run(pings(internet_ms=35.0))
+    assert events(db) == []
+    assert alerts(db) == []
+
+
+# AT-09.2
 
 def test_hold_constant_is_at_least_2():
     """MIN_BAD_SAMPLES must be >= 2 (SRS: 2-minute hold-down, F-09a)."""
-    assert MIN_BAD_SAMPLES >= 2, (
-        f"MIN_BAD_SAMPLES={MIN_BAD_SAMPLES} — must be >= 2 for 2-min hold (SRS F-09a)"
-    )
+    assert MIN_BAD_SAMPLES >= 2
 
 
-def test_single_bad_sample_does_not_open_event(db):
-def test_single_bad_sample_does_not_open_event():
-    """A single elevated reading should NOT open a SlowdownEvent (hold-down)."""
-    import clarinet.analytics.diagnosis as diag_mod
-    # Force counter to 0 before test
-    diag_mod._consecutive_bad = 0
-
-    mock_baseline = MagicMock()
-    mock_baseline.avg_latency_ms = 30.0
-    mock_baseline.std_latency_ms = 5.0
-
-    pings = _ping_results(internet_ms=100.0, internet_loss=0.0)
-
-    with patch("clarinet.analytics.diagnosis.SessionLocal") as mock_sl, \
-         patch("clarinet.analytics.diagnosis.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.diagnosis.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.diagnosis.latency_is_elevated", return_value=True), \
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = None
-
-    with patch("clarinet.database.SessionLocal", return_value=_make_session_context(mock_db)), \
-         patch("clarinet.analytics.baseline.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.baseline.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.baseline.latency_is_elevated", return_value=True), \
-         patch("clarinet.analytics.diagnosis._speed_below_plan_check", return_value=False):
-
-        mock_db = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_sl.return_value.__enter__ = MagicMock(return_value=mock_db)
-        mock_sl.return_value.__exit__ = MagicMock(return_value=False)
-
-        # First call — _consecutive_bad goes from 0 → 1 (below MIN_BAD_SAMPLES=2)
-        # First call — _consecutive_bad goes 0→1 (below MIN_BAD_SAMPLES=2)
-        check_slowdown(pings)
-
-        # Should NOT have added a new event yet
-        mock_db.add.assert_not_called()
-
-    # Reset counter for other tests
-    diag_mod._consecutive_bad = 0
+def test_single_bad_sample_does_not_open_event(run, db):
+    run(pings(internet_ms=100.0))
+    assert events(db) == []
 
 
-# ── AT-09.3 ───────────────────────────────────────────────────────────────────
-
-def test_outage_detected_when_internet_unreachable(db):
-    """When internet is unreachable (packet_loss=1.0), INTERNET_OUTAGE is opened."""
-def test_outage_detected_when_internet_unreachable():
-    """When internet is unreachable (packet_loss=1.0), an event is opened."""
-    import clarinet.analytics.diagnosis as diag_mod
-    # Pre-fill counter so hold is satisfied
-    diag_mod._consecutive_bad = MIN_BAD_SAMPLES
-    diag_mod._consecutive_bad = MIN_BAD_SAMPLES  # hold satisfied
-
-    mock_baseline = MagicMock()
-    mock_baseline.avg_latency_ms = 30.0
-    mock_baseline.std_latency_ms = 5.0
-
-    pings = _ping_results(internet_ms=9999.0, internet_loss=1.0, internet_up=False)
-
-    added_events = []
-
-    with patch("clarinet.analytics.diagnosis.SessionLocal") as mock_sl, \
-         patch("clarinet.analytics.diagnosis.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.diagnosis.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.diagnosis.latency_is_elevated", return_value=True), \
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = None
-    mock_db.add.side_effect = lambda obj: added_events.append(obj)
-
-    with patch("clarinet.database.SessionLocal", return_value=_make_session_context(mock_db)), \
-         patch("clarinet.analytics.baseline.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.baseline.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.baseline.latency_is_elevated", return_value=True), \
-         patch("clarinet.analytics.diagnosis._speed_below_plan_check", return_value=False), \
-         patch("clarinet.analytics.diagnosis._build_causes", return_value=(
-             [{"cause": "INTERNET_OUTAGE", "confidence": "likely",
-               "evidence": "No internet.", "suggestion": "Call your ISP."}], {}
-         )):
-         patch("clarinet.analytics.diagnosis._raise_alert"):
-
-        mock_db = MagicMock()
-        # No active event
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-        mock_db.add.side_effect = lambda obj: added_events.append(obj)
-        mock_sl.return_value.__enter__ = MagicMock(return_value=mock_db)
-        mock_sl.return_value.__exit__ = MagicMock(return_value=False)
-
-        check_slowdown(pings)
-
-        # A SlowdownEvent should have been added
-        assert len(added_events) >= 1
-        event = added_events[0]
-        assert hasattr(event, "cause") or hasattr(event, "causes_json") or hasattr(event, "started_at")
-
-    assert len(added_events) >= 1, "Expected at least one SlowdownEvent to be added"
-    diag_mod._consecutive_bad = 0
+def test_event_opens_after_the_hold_down(run, db):
+    for _ in range(MIN_BAD_SAMPLES):
+        run(pings(internet_ms=100.0))
+    [event] = events(db)
+    assert event.ended_at is None
+    assert event.causes, "an event must record at least one cause"
 
 
-# ── AT-09.5 ───────────────────────────────────────────────────────────────────
+def test_a_good_sample_resets_the_hold_down(run, db):
+    run(pings(internet_ms=100.0))
+    run(pings(internet_ms=25.0))           # recovered, counter resets
+    run(pings(internet_ms=100.0))
+    assert events(db) == []
+
+
+# AT-09.3
+
+def test_slowdown_is_a_warning_not_critical(run, db):
+    for _ in range(MIN_BAD_SAMPLES):
+        run(pings(internet_ms=100.0))
+    [alert] = alerts(db)
+    assert alert.type == "SLOWDOWN"
+    assert alert.level == "WARNING"
+
+
+def test_outage_is_critical_and_says_the_internet_is_down(run, db):
+    for _ in range(MIN_BAD_SAMPLES):
+        run(pings(internet_ms=9999.0, internet_loss=1.0, internet_up=False))
+    [event] = events(db)
+    assert event.causes[0]["cause"] == "INTERNET_OUTAGE"
+    [alert] = alerts(db)
+    assert alert.type == "OUTAGE"
+    assert alert.level == "CRITICAL"
+    assert "down" in alert.title.lower(), f"outage alert said: {alert.title!r}"
+
+
+def test_a_continuing_slowdown_does_not_open_a_second_event(run, db):
+    for _ in range(MIN_BAD_SAMPLES + 3):
+        run(pings(internet_ms=100.0))
+    assert len(events(db)) == 1
+
+
+# AT-09.5
 
 def test_format_alert_no_jargon():
-    """_format_alert returns human-readable title and message."""
-    jargon = ["ICMP", "TCP", "traceroute", "RTT", "API", "AI-powered", "milliseconds", "algorithm"]
     jargon = ["ICMP", "TCP", "traceroute", "RTT", "AI-powered", "algorithm"]
-
-    causes_by_type = [
-        ("INTERNET_OUTAGE", [{"cause": "INTERNET_OUTAGE", "confidence": "likely",
-                               "evidence": "Internet is unreachable.",
-                               "suggestion": "Contact your ISP."}]),
+    cases = [
+        ("OUTAGE", [{"cause": "INTERNET_OUTAGE", "confidence": "likely",
+                     "evidence": "Your internet connection is not responding.",
+                     "suggestion": "Try restarting your router."}]),
         ("SLOWDOWN", [{"cause": "ONE_DEVICE_HEAVY", "confidence": "likely",
-                        "evidence": "One device is using most of the bandwidth.",
-                        "suggestion": "Pause downloads on that device."}]),
+                       "evidence": "One device is using most of the bandwidth.",
+                       "suggestion": "Pause downloads on that device."}]),
         ("SLOWDOWN", [{"cause": "NO_CLEAR_CAUSE", "confidence": "possible",
-                        "evidence": "Network is slow.",
-                        "suggestion": "Restart your router."}]),
+                       "evidence": "Network is slow.", "suggestion": "Restart your router."}]),
     ]
-
-    for kind, causes in causes_by_type:
+    for kind, causes in cases:
         title, message = _format_alert(kind, causes, {})
-        full_text = f"{title} {message}"
+        text = f"{title} {message}".lower()
         for word in jargon:
-            assert word.lower() not in full_text.lower(), (
-                f"Jargon '{word}' in alert text for {kind}: {full_text!r}"
-            )
+            assert word.lower() not in text, f"jargon {word!r} in {text!r}"
 
 
-# ── AT-09.6 ───────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("kind", ["OUTAGE", "INTERNET_OUTAGE"])
+def test_outage_title_is_not_the_generic_slowdown_title(kind):
+    title, _ = _format_alert(kind, [{"cause": "INTERNET_OUTAGE", "evidence": "x", "suggestion": "y"}], {})
+    assert "slower than usual" not in title.lower()
+    assert "down" in title.lower()
 
-def test_active_event_closed_when_network_ok(db):
-def test_active_event_closed_when_network_ok():
-    """Open SlowdownEvent gets ended_at set when network returns to normal."""
-    import clarinet.analytics.diagnosis as diag_mod
-    diag_mod._consecutive_bad = 0
 
-    mock_baseline = MagicMock()
-    mock_baseline.avg_latency_ms = 30.0
-    mock_baseline.std_latency_ms = 5.0
+# AT-09.6
 
-    pings = _ping_results(internet_ms=25.0, internet_loss=0.0)  # back to normal
+def test_active_event_closed_when_network_ok(run, db):
+    for _ in range(MIN_BAD_SAMPLES):
+        run(pings(internet_ms=100.0))
+    [event] = events(db)
+    assert event.ended_at is None
 
-    # Fake open event
-    fake_event = MagicMock()
-    fake_event.ended_at = None
-    fake_event.event_id = 42
-
-    with patch("clarinet.analytics.diagnosis.SessionLocal") as mock_sl, \
-         patch("clarinet.analytics.diagnosis.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.diagnosis.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.diagnosis.latency_is_elevated", return_value=False), \
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = fake_event
-
-    with patch("clarinet.database.SessionLocal", return_value=_make_session_context(mock_db)), \
-         patch("clarinet.analytics.baseline.is_baseline_ready", return_value=True), \
-         patch("clarinet.analytics.baseline.get_baseline_for_now", return_value=mock_baseline), \
-         patch("clarinet.analytics.baseline.latency_is_elevated", return_value=False), \
-         patch("clarinet.analytics.diagnosis._speed_below_plan_check", return_value=False):
-
-        mock_db = MagicMock()
-        # Return our fake open event
-        mock_db.query.return_value.filter.return_value.first.return_value = fake_event
-        mock_sl.return_value.__enter__ = MagicMock(return_value=mock_db)
-        mock_sl.return_value.__exit__ = MagicMock(return_value=False)
-
-        check_slowdown(pings)
-
-        # ended_at should have been set
-        assert fake_event.ended_at is not None, "Event should be closed when network recovers"
-    assert fake_event.ended_at is not None, "Event should be closed when network recovers"
+    run(pings(internet_ms=25.0))           # back to normal
+    db.refresh(event)
+    assert event.ended_at is not None, "event should be closed when the network recovers"

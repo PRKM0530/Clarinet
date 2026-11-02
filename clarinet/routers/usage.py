@@ -30,14 +30,11 @@ def usage_page(request: Request, db: Session = Depends(get_db)):
         return result
     user = result
 
-    period = request.query_params.get("period", "week")
+    period = _clean_period(request.query_params.get("period", "week"))
     from clarinet.core_svc.usage_service import usage_for
     from clarinet.core_svc.settings_m1 import billing_day
     bday = billing_day(db)
     usage = usage_for(db, user, period, billing_day=bday)
-
-    from clarinet.models import Device
-    devices = db.query(Device).order_by(Device.last_seen.desc()).all()
 
     return templates.TemplateResponse("usage/index.html", {
         "request": request,
@@ -45,7 +42,8 @@ def usage_page(request: Request, db: Session = Depends(get_db)):
         "page": "usage",
         "period": period,
         "usage": usage,
-        "devices": devices,
+        "device": None,
+        "device_rows": _device_rows(db, usage),
         "by_day_json": _json_safe(usage.by_day),
         "by_hour_json": _json_safe(usage.by_hour),
     })
@@ -67,7 +65,7 @@ def usage_device(device_id: int, request: Request, db: Session = Depends(get_db)
     if device is None:
         return RedirectResponse(url="/usage?error=not_found", status_code=302)
 
-    period = request.query_params.get("period", "week")
+    period = _clean_period(request.query_params.get("period", "week"))
     from clarinet.core_svc.usage_service import usage_for
     from clarinet.core_svc.settings_m1 import billing_day
     bday = billing_day(db)
@@ -80,6 +78,7 @@ def usage_device(device_id: int, request: Request, db: Session = Depends(get_db)
         "period": period,
         "usage": usage,
         "device": device,
+        "device_rows": _device_rows(db, usage),
         "by_day_json": _json_safe(usage.by_day),
         "by_hour_json": _json_safe(usage.by_hour),
     })
@@ -92,7 +91,7 @@ def api_usage_summary(request: Request, db: Session = Depends(get_db)):
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401)
 
-    period = request.query_params.get("period", "week")
+    period = _clean_period(request.query_params.get("period", "week"))
     device_id = request.query_params.get("device_id")
     did = int(device_id) if device_id and device_id.isdigit() else None
 
@@ -150,7 +149,7 @@ def export_usage_csv(request: Request, db: Session = Depends(get_db)):
         return result
     user = result
 
-    period = request.query_params.get("period", "month")
+    period = _clean_period(request.query_params.get("period", "month"))
     from clarinet.core_svc.usage_service import usage_for
     from clarinet.core_svc.settings_m1 import billing_day
     from clarinet.core_svc.exporter import rows_to_csv
@@ -186,3 +185,28 @@ def export_usage_csv(request: Request, db: Session = Depends(get_db)):
 def _json_safe(d: dict) -> str:
     import json
     return json.dumps({str(k): v for k, v in d.items()})
+
+
+def _clean_period(period: str) -> str:
+    """Accept only a known period keyword or a real YYYY-MM-DD date; anything else means "week"."""
+    from datetime import date
+    if period in ("today", "week", "month", "billing"):
+        return period
+    try:
+        date.fromisoformat(period)
+        return period
+    except ValueError:
+        return "week"
+
+
+def _device_rows(db, usage) -> list[dict]:
+    """Per-device totals for the table, biggest first. Only devices the usage result already covers."""
+    from clarinet.models import Device
+    if not usage.by_device:
+        return []
+    devices = {d.device_id: d for d in db.query(Device).filter(Device.device_id.in_(list(usage.by_device)))}
+    rows = [
+        {"device": devices[i], "bytes_in": bi, "bytes_out": bo, "total": bi + bo}
+        for i, (bi, bo) in usage.by_device.items() if i in devices
+    ]
+    return sorted(rows, key=lambda r: r["total"], reverse=True)

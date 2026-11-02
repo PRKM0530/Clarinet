@@ -2,46 +2,76 @@
 {% block title %}Usage{% endblock %}
 {% block page_title %}Data Usage{% endblock %}
 {% block content %}
+{% set periods = [('today', 'Today'), ('week', '7 days'), ('month', 'This month'), ('billing', 'Billing cycle')] %}
+{% set base_url = ('/usage/device/' ~ device.device_id) if device else '/usage' %}
+
 <div class="page-header">
-  <h2>Data Usage</h2>
-  <p>Per-device traffic over the last 7 days.</p>
+  <h2>{% if device %}{{ device.label or device.hostname or device.mac_address }}{% else %}Data Usage{% endif %}</h2>
+  <p>
+    {% if device %}<a href="/usage" style="color:var(--text-2)">&larr; All devices</a> · {% endif %}
+    {{ usage.period_start }}{% if usage.period_end != usage.period_start %} to {{ usage.period_end }}{% endif %}
+    {% if not user.is_admin and not device %} · your devices only{% endif %}
+  </p>
 </div>
 
-<div class="card" style="margin-bottom:20px">
-  <div class="card-header">
-    <i class="bi bi-bar-chart-line" style="color:var(--text-3)"></i>
-    <span class="card-header-title">7-Day Traffic</span>
-    <span class="card-header-sub">All devices stacked</span>
+<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+  {% for key, label in periods %}
+  <a href="{{ base_url }}?period={{ key }}" class="btn {{ 'btn-primary' if period == key else 'btn-secondary' }} btn-sm">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px">
+  <div class="card" style="padding:16px"><div style="font-size:12px;color:var(--text-3)">Total</div>
+    <div style="font-size:24px;font-weight:600">{{ usage.total_gb if usage.total_bytes >= 1073741824 else usage.total_mb }}
+      <span style="font-size:13px;color:var(--text-3)">{{ 'GB' if usage.total_bytes >= 1073741824 else 'MB' }}</span></div></div>
+  <div class="card" style="padding:16px"><div style="font-size:12px;color:var(--text-3)">Download</div>
+    <div style="font-size:24px;font-weight:600">{{ (usage.bytes_in / 1048576)|round(1) }} <span style="font-size:13px;color:var(--text-3)">MB</span></div></div>
+  <div class="card" style="padding:16px"><div style="font-size:12px;color:var(--text-3)">Upload</div>
+    <div style="font-size:24px;font-weight:600">{{ (usage.bytes_out / 1048576)|round(1) }} <span style="font-size:13px;color:var(--text-3)">MB</span></div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-bar-chart-line" style="color:var(--text-3)"></i>
+      <span class="card-header-title">Traffic by day</span>
+    </div>
+    <div style="padding:20px"><canvas id="dayChart" height="120"></canvas></div>
   </div>
-  <div style="padding:20px">
-    <canvas id="usageChart" height="80"></canvas>
+  <div class="card">
+    <div class="card-header">
+      <i class="bi bi-clock" style="color:var(--text-3)"></i>
+      <span class="card-header-title">Traffic by hour of day</span>
+    </div>
+    <div style="padding:20px"><canvas id="hourChart" height="120"></canvas></div>
   </div>
 </div>
 
+{% if not device %}
 <div class="card">
   <div class="card-header">
     <i class="bi bi-table" style="color:var(--text-3)"></i>
-    <span class="card-header-title">Daily Totals</span>
+    <span class="card-header-title">Per-device totals</span>
   </div>
   <div class="table-wrap">
     <table class="cl-table">
-      <thead>
-        <tr><th>Device</th><th>Date</th><th>Download</th><th>Upload</th><th>Total</th></tr>
-      </thead>
+      <thead><tr><th>Device</th><th>Download</th><th>Upload</th><th>Total</th></tr></thead>
       <tbody>
-        {% for r in records %}
+        {% for r in device_rows %}
         <tr>
-          <td style="font-weight:500">{{ r.label or r.hostname or r.mac_address }}</td>
-          <td style="font-size:12px;color:var(--text-3)">{{ r.date }}</td>
-          <td>{{ (r.bytes_in / 1_048_576)|round(1) }} MB</td>
-          <td>{{ (r.bytes_out / 1_048_576)|round(1) }} MB</td>
-          <td style="font-weight:600">{{ ((r.bytes_in + r.bytes_out) / 1_048_576)|round(1) }} MB</td>
+          <td style="font-weight:500">
+            <a href="/usage/device/{{ r.device.device_id }}?period={{ period }}" style="color:var(--text)">
+              {{ r.device.label or r.device.hostname or r.device.mac_address }}</a>
+          </td>
+          <td>{{ (r.bytes_in / 1048576)|round(1) }} MB</td>
+          <td>{{ (r.bytes_out / 1048576)|round(1) }} MB</td>
+          <td style="font-weight:600">{{ (r.total / 1048576)|round(1) }} MB</td>
         </tr>
         {% else %}
-        <tr><td colspan="5">
+        <tr><td colspan="4">
           <div class="empty-state">
             <i class="bi bi-bar-chart-line"></i>
-            <h4>No usage data yet</h4>
+            <h4>No usage data for this period</h4>
             <p>The collector records traffic in hourly buckets on Linux.</p>
           </div>
         </td></tr>
@@ -50,33 +80,33 @@
     </table>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-const labels    = {{ date_labels | tojson }};
-const chartData = {{ chart_data  | tojson }};
-const COLORS = ['#3b82f6','#22c55e','#f97316','#ef4444','#a855f7','#14b8a6','#ec4899','#eab308'];
+const byDay  = {{ by_day_json | safe }};
+const byHour = {{ by_hour_json | safe }};
+const mb = v => Math.round((v || 0) / 1048576 * 10) / 10;
+const axis = { ticks: { color: '#666' }, grid: { color: 'rgba(255,255,255,.05)' } };
+const opts = {
+  responsive: true,
+  plugins: { legend: { display: false } },
+  scales: { x: axis, y: { ...axis, title: { display: true, text: 'MB', color: '#a0a0a0' } } }
+};
 
-const datasets = Object.entries(chartData).map(([name, daily], i) => ({
-  label: name,
-  data: labels.map(d => Math.round((daily[d] || 0) / 1048576 * 10) / 10),
-  backgroundColor: COLORS[i % COLORS.length] + 'bb',
-  borderColor: COLORS[i % COLORS.length],
-  borderWidth: 1,
-}));
-
-new Chart(document.getElementById('usageChart'), {
+const days = Object.keys(byDay).sort();
+new Chart(document.getElementById('dayChart'), {
   type: 'bar',
-  data: { labels, datasets },
-  options: {
-    responsive: true,
-    plugins: { legend: { position:'right', labels:{ color:'#a0a0a0', font:{ size:12 } } } },
-    scales: {
-      x: { stacked:true, ticks:{ color:'#666' }, grid:{ color:'rgba(255,255,255,.05)' } },
-      y: { stacked:true, title:{ display:true, text:'MB', color:'#a0a0a0' }, ticks:{ color:'#666' }, grid:{ color:'rgba(255,255,255,.05)' } }
-    }
-  }
+  data: { labels: days, datasets: [{ data: days.map(d => mb(byDay[d])), backgroundColor: '#3b82f6bb', borderColor: '#3b82f6', borderWidth: 1 }] },
+  options: opts
+});
+
+const hours = Array.from({ length: 24 }, (_, h) => h);
+new Chart(document.getElementById('hourChart'), {
+  type: 'bar',
+  data: { labels: hours.map(h => String(h).padStart(2, '0') + ':00'), datasets: [{ data: hours.map(h => mb(byHour[h])), backgroundColor: '#22c55ebb', borderColor: '#22c55e', borderWidth: 1 }] },
+  options: opts
 });
 </script>
 {% endblock %}

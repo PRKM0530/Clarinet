@@ -47,7 +47,7 @@ sudo -u "$APP_USER" $PYTHON -m venv "$APP_DIR/.venv"
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q --upgrade pip
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q -r "$APP_DIR/requirements.txt"
 # Linux-only packages
-sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q scapy zeroconf
+sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q scapy netifaces zeroconf
 
 # ── 5. Download offline static assets ────────────────────────────
 echo "▶ Downloading frontend assets…"

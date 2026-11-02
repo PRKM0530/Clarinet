@@ -128,10 +128,11 @@ def api_alerts(
     if err:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    q = db.query(Alert)
+    from clarinet.core_svc.permissions import visible_alerts
+    q = visible_alerts(db, user)
     if status != "ALL":
         q = q.filter(Alert.status == status)
-    alerts = q.order_by(Alert.raised_at.desc()).limit(limit).all()
+    alerts = q.order_by(Alert.raised_at.desc()).limit(max(1, min(limit, 200))).all()
 
     return [
         {

@@ -1,31 +1,22 @@
 """
 Test setup for the security tests.
 
-Points the app at a throw-away SQLite file before clarinet is imported, so the
-real clarinet.db is never touched.
+tests/conftest.py points the session at a throw-away database; this file only
+double-checks that before it drops and recreates tables.
 """
 
-import os
-import sys
-import tempfile
-from pathlib import Path
+import pytest
 
-_db_file = Path(tempfile.mkdtemp(prefix="clarinet_test_")) / "test.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{_db_file.as_posix()}"
-os.environ["SECRET_KEY"] = "test-secret-key"
-os.environ["APP_ENV"] = "test"
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-import pytest  # noqa: E402
-
-from clarinet.database import Base, SessionLocal, engine  # noqa: E402
-import clarinet.models  # noqa: E402,F401  (registers every table)
+from clarinet.database import Base, SessionLocal, engine
+import clarinet.models  # noqa: F401  (registers every table)
 
 
 @pytest.fixture()
 def db():
     """A clean database for each test."""
+    assert "clarinet_test_" in str(engine.url), (
+        f"refusing to reset tables on {engine.url}: not the throw-away test database"
+    )
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()

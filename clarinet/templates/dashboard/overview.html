@@ -13,7 +13,7 @@
   </div>
   <div class="stat-card stat-orange">
     <div class="stat-label"><i class="bi bi-hourglass-split"></i> Awaiting Approval</div>
-    <div class="stat-value">{{ new_devices }}</div>
+    <div class="stat-value">{{ new_devices if new_devices is not none else "—" }}</div>
     <div class="stat-meta">
       {% if new_devices %}<a href="/devices" style="color:var(--orange);font-size:12px">Review →</a>{% else %}All clear{% endif %}
     </div>
@@ -40,7 +40,7 @@
   <div class="stat-card stat-purple">
     <div class="stat-label"><i class="bi bi-database"></i> Usage Today</div>
     <div class="stat-value">{{ (today_traffic_mb or 0)|round(0)|int }} <small>MB</small></div>
-    <div class="stat-meta">All devices combined</div>
+    <div class="stat-meta">{{ "All devices combined" if user.is_admin else "Your devices" }}</div>
   </div>
 </div>
 

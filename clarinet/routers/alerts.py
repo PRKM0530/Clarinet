@@ -35,13 +35,9 @@ def alerts_page(request: Request, db: Session = Depends(get_db)):
     page = max(1, int(request.query_params.get("page", "1")))
     per_page = 20
 
+    from clarinet.core_svc.permissions import visible_alerts
     from clarinet.models import Alert
-    q = db.query(Alert)
-    if not user.is_admin:
-        # Members only see alerts about their own devices. Network-wide and
-        # security alerts (ARP spoofing, router audit, fake APs) are admin-only.
-        from clarinet.core_svc.permissions import member_device_ids
-        q = q.filter(Alert.device_id.in_(member_device_ids(db, user)))
+    q = visible_alerts(db, user)
     if level_filter:
         q = q.filter(Alert.level == level_filter.upper())
     if status_filter:
@@ -80,12 +76,10 @@ def ack_alert_route(alert_id: int, request: Request, db: Session = Depends(get_d
 
     from clarinet.core_svc.alerts import ack_alert
     from clarinet.auth import audit
-    if not user.is_admin:
-        from clarinet.core_svc.permissions import member_device_ids
-        from clarinet.models import Alert
-        alert = db.get(Alert, alert_id)
-        if alert is None or alert.device_id not in member_device_ids(db, user):
-            return RedirectResponse(url="/alerts?info=not_found", status_code=302)
+    from clarinet.core_svc.permissions import visible_alerts
+    from clarinet.models import Alert
+    if visible_alerts(db, user).filter(Alert.alert_id == alert_id).first() is None:
+        return RedirectResponse(url="/alerts?info=not_found", status_code=302)
     ok = ack_alert(db, alert_id, user.member_id)
     if ok:
         audit(db, user.member_id, "ACK_ALERT", "Alert", alert_id)
@@ -124,14 +118,14 @@ def api_devices_summary(request: Request, db: Session = Depends(get_db)):
     if user is None:
         return JSONResponse({"error": "unauthenticated"}, status_code=401)
 
+    from clarinet.core_svc.permissions import member_device_ids
     from clarinet.models import Device
     from sqlalchemy import func
 
-    rows = (
-        db.query(Device.state, func.count(Device.device_id))
-        .group_by(Device.state)
-        .all()
-    )
+    query = db.query(Device.state, func.count(Device.device_id))
+    if not user.is_admin:
+        query = query.filter(Device.device_id.in_(member_device_ids(db, user)))
+    rows = query.group_by(Device.state).all()
     counts = {state: count for state, count in rows}
     total = sum(counts.values())
 
