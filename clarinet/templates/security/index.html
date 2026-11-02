@@ -4,7 +4,140 @@
 {% block content %}
 <div class="page-header">
   <h2>Security</h2>
-  <p>Randomised MACs, suspicious devices, and admin audit log.</p>
+  <p>Router audit, fake access points, unfamiliar networks, suspicious devices, and the admin audit log.</p>
+</div>
+
+{% set messages = {
+  'audit_done': 'Router audit finished.',
+  'audit_failed': 'Router audit could not run: no default gateway was found.',
+  'scan_done': 'Wi-Fi scan finished.',
+  'ap_trusted': 'Access point trusted.',
+  'ap_removed': 'Access point removed from the trusted list.',
+  'network_trusted': 'Network trusted.',
+  'network_removed': 'Network forgotten.'
+} %}
+{% if msg and messages.get(msg) %}
+<div class="card" style="padding:10px 16px;margin-bottom:16px;border-left:3px solid var(--green)">{{ messages[msg] }}</div>
+{% endif %}
+
+<!-- Router audit -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <i class="bi bi-router" style="color:var(--blue)"></i>
+    <span class="card-header-title">Router Audit</span>
+    <span class="card-header-sub">
+      {% if router_audit_time %}{{ router_gateway }} · last run {{ router_audit_time.strftime('%d %b %H:%M') }}{% else %}Not run yet{% endif %}
+    </span>
+    <form method="post" action="/security/router-audit/run" style="margin-left:auto">
+      <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-play-fill"></i> Run audit</button>
+    </form>
+  </div>
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead><tr><th>Severity</th><th>Finding</th><th>What to do</th></tr></thead>
+      <tbody>
+        {% for f in router_findings %}
+        <tr>
+          <td><span class="badge badge-{{ {'HIGH':'red','MEDIUM':'orange','LOW':'yellow','OK':'green'}[f.severity] }}">{{ f.severity }}</span></td>
+          <td style="font-weight:500">{{ f.title }}</td>
+          <td style="font-size:12.5px;color:var(--text-2)">{{ f.detail }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3"><div class="empty-state" style="padding:28px"><i class="bi bi-router"></i><h4>No audit results yet</h4></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Wi-Fi access points -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <i class="bi bi-wifi" style="color:var(--yellow)"></i>
+    <span class="card-header-title">Wi-Fi Access Points</span>
+    <span class="card-header-sub">{{ trusted_aps|length }} trusted</span>
+    <form method="post" action="/security/wifi/scan" style="margin-left:auto">
+      <button class="btn btn-secondary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> Scan now</button>
+    </form>
+  </div>
+  <form method="post" action="/security/access-points/trust">
+  <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;font-size:12.5px;color:var(--text-2)">
+    <span>Tick only the access points you recognise as yours (check the BSSID against your router or mesh label), then trust them.</span>
+    <button class="btn btn-primary btn-sm" type="submit" style="margin-left:auto"><i class="bi bi-shield-check"></i> Trust selected</button>
+  </div>
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead><tr><th></th><th>Network</th><th>BSSID</th><th>Signal</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for ap in access_points %}
+        <tr>
+          <td style="width:32px">
+            {% if ap.bssid not in trusted_bssids %}<input type="checkbox" name="bssid" value="{{ ap.bssid }}" aria-label="Trust {{ ap.bssid }}">{% endif %}
+          </td>
+          <td style="font-weight:500">{{ ap.ssid or '(hidden)' }}
+            <div style="font-size:11px;color:var(--text-3)">{{ ap.security or '' }}</div></td>
+          <td style="font-family:monospace;font-size:12px">{{ ap.bssid }}</td>
+          <td style="font-size:12px">{{ ap.signal ~ '%' if ap.signal is not none else '—' }}</td>
+          <td>
+            {% if ap.bssid in trusted_bssids %}<span class="badge badge-green">Trusted</span>
+            {% elif ap.verdict == 'SUSPECT' %}<span class="badge badge-red" title="{{ ap.reason }}">Suspect</span>
+            {% else %}<span class="badge badge-gray">Neighbour</span>{% endif %}
+            {% if ap.verdict == 'SUSPECT' and ap.reason %}<div style="font-size:11px;color:var(--text-3)">{{ ap.reason }}</div>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5"><div class="empty-state" style="padding:28px"><i class="bi bi-wifi"></i><h4>No scan results yet</h4></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  </form>
+  {% if trusted_aps %}
+  <div style="padding:12px 16px;border-top:1px solid var(--border);font-size:12.5px">
+    <strong>Trusted:</strong>
+    {% for t in trusted_aps %}
+    <form method="post" action="/security/access-points/{{ t.ap_id }}/untrust" style="display:inline">
+      <span class="badge badge-green">{{ t.ssid }} · {{ t.bssid }}</span>
+      <button class="btn btn-ghost btn-sm" type="submit" title="Remove" style="padding:0 6px">×</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Known networks -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <i class="bi bi-diagram-3" style="color:var(--blue)"></i>
+    <span class="card-header-title">Known Networks</span>
+    <span class="card-header-sub">Identified by the router's MAC address</span>
+  </div>
+  <div class="table-wrap">
+    <table class="cl-table">
+      <thead><tr><th>Network</th><th>Router MAC</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for n in networks %}
+        <tr>
+          <td style="font-weight:500">{{ n.ssid or n.gateway_ip or '—' }}
+            <div style="font-size:11px;color:var(--text-3)">{{ n.label or '' }} {{ n.subnet or '' }}</div></td>
+          <td style="font-family:monospace;font-size:12px">{{ n.gateway_mac }}</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ n.last_seen.strftime('%d %b %H:%M') }}</td>
+          <td><span class="badge badge-{{ 'green' if n.trusted else 'red' }}">{{ 'Trusted' if n.trusted else 'Not trusted' }}</span></td>
+          <td style="white-space:nowrap">
+            {% if not n.trusted %}
+            <form method="post" action="/security/networks/{{ n.network_id }}/trust" style="display:inline">
+              <button class="btn btn-ghost btn-sm" type="submit">Trust</button></form>
+            {% endif %}
+            <form method="post" action="/security/networks/{{ n.network_id }}/forget" style="display:inline">
+              <button class="btn btn-ghost btn-sm" type="submit">Forget</button></form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5"><div class="empty-state" style="padding:28px"><i class="bi bi-diagram-3"></i><h4>No networks recorded yet</h4></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
