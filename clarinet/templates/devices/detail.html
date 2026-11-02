@@ -81,6 +81,20 @@
 </div>
 
 <!-- Quick actions row -->
+{% if user.is_admin %}
+<form method="post" action="/devices/{{ device.device_id }}/owner"
+      style="margin-top:20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  <label class="form-label" style="margin:0">Owner</label>
+  <select name="owner_id" class="form-select" style="max-width:220px">
+    <option value="">— No owner —</option>
+    {% for m in members %}
+    <option value="{{ m.member_id }}" {{ 'selected' if device.owner_member_id == m.member_id else '' }}>{{ m.username }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-secondary btn-sm" type="submit">Save owner</button>
+</form>
+{% endif %}
+
 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
   {% if device.state != 'BLOCKED' %}
   <form method="post" action="/devices/{{ device.device_id }}/block"

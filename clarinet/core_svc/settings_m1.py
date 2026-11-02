@@ -89,11 +89,11 @@ def alerts_new_device_cooldown_s(db: Session) -> int:
 
 
 def alerts_limit_warn_pct(db: Session) -> float:
-    return _get_float(db, "alerts.limit_warn_pct", 0.80)
+    return _get_float(db, "alerts.limit_warn_pct", 0.70)
 
 
 def alerts_limit_crit_pct(db: Session) -> float:
-    return _get_float(db, "alerts.limit_crit_pct", 0.95)
+    return _get_float(db, "alerts.limit_crit_pct", 0.90)
 
 
 # ─── Data limit settings ───────────────────────────────────────────────────────

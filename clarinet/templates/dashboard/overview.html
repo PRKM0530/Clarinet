@@ -42,6 +42,14 @@
     <div class="stat-value">{{ (today_traffic_mb or 0)|round(0)|int }} <small>MB</small></div>
     <div class="stat-meta">{{ "All devices combined" if user.is_admin else "Your devices" }}</div>
   </div>
+  {% if limit %}
+  {% set pct = ((limit.pct_used or 0) * 100)|round(0)|int %}
+  <div class="stat-card {{ 'stat-red' if pct >= 90 else ('stat-orange' if pct >= 70 else 'stat-teal') }}">
+    <div class="stat-label"><i class="bi bi-speedometer2"></i> Monthly Data</div>
+    <div class="stat-value">{{ pct }}<small>%</small></div>
+    <div class="stat-meta">{{ limit.gb_used }} of {{ (limit.bytes_limit / 1073741824)|round(0)|int }} GB · {{ limit.days_remaining }} days left</div>
+  </div>
+  {% endif %}
 </div>
 
 <!-- Active slowdown alert -->
@@ -55,7 +63,7 @@
       — since {{ active_slowdown.started_at.strftime('%H:%M') if active_slowdown.started_at else '' }}
     </div>
   </div>
-  <a href="/slowdowns" class="btn btn-danger btn-sm" style="margin-left:auto">View details</a>
+  {% if user.is_admin %}<a href="/slowdowns" class="btn btn-danger btn-sm" style="margin-left:auto">View details</a>{% endif %}
 </div>
 {% endif %}
 

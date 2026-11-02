@@ -63,6 +63,7 @@ def update_settings(
     plan_download_mbps: Optional[str] = Form(None),
     plan_upload_mbps: Optional[str]   = Form(None),
     billing_day: Optional[str]        = Form(None),
+    monthly_limit_gb: Optional[str]   = Form(None),
     speed_test_interval_hours: Optional[str] = Form(None),
     slowdown_latency_multiplier: Optional[str] = Form(None),
     slowdown_speed_threshold: Optional[str]    = Form(None),
@@ -84,6 +85,20 @@ def update_settings(
         "slowdown_speed_threshold": slowdown_speed_threshold,
     }
 
+    # Monthly data limit: blank means no limit; otherwise GB -> bytes under "limit.bytes".
+    if monthly_limit_gb is not None:
+        text = monthly_limit_gb.strip()
+        if text == "":
+            params["limit.bytes"] = ""
+        else:
+            try:
+                gb = float(text)
+            except ValueError:
+                gb = -1
+            if not (0 < gb <= 1_000_000):
+                return RedirectResponse(url="/settings?error=bad_limit", status_code=302)
+            params["limit.bytes"] = str(int(gb * 1_073_741_824))
+
     changed = []
     for key, val in params.items():
         if val is not None:
@@ -97,6 +112,28 @@ def update_settings(
         audit(db, user.member_id, "UPDATE_SETTINGS", detail={"changed": changed})
 
     return RedirectResponse(url="/settings?info=saved", status_code=302)
+
+
+# POST /settings/purge: delete all stored network data (SYS-5)
+
+@router.post("/purge")
+def purge_everything(
+    request: Request,
+    confirm: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+
+    if confirm.strip() != "DELETE":
+        return RedirectResponse(url="/settings?error=confirm_delete", status_code=302)
+
+    from clarinet.core_svc.purge import purge_all_data
+    counts = purge_all_data(db)
+    audit(db, user.member_id, "PURGE_ALL_DATA", detail={"rows": sum(counts.values())})
+    return RedirectResponse(url="/settings?info=data_deleted", status_code=302)
 
 
 # POST /settings/members/create

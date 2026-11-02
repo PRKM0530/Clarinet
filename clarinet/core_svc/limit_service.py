@@ -137,7 +137,19 @@ def check_and_alert(db: Session) -> None:
     used_gb = summary.gb_used
     limit_gb = round(summary.bytes_limit / 1_073_741_824, 1)
 
-    if pct >= summary.crit_pct:
+    if pct >= 1.0:
+        raise_alert(
+            db,
+            level="CRITICAL",
+            type="DATA_LIMIT_EXCEEDED",
+            title="Monthly data limit reached",
+            message=(
+                f"Used {used_gb:.1f} GB of {limit_gb} GB ({pct*100:.0f}%). "
+                f"The limit resets in {summary.days_remaining} day(s)."
+            ),
+            cooldown_s=3600,
+        )
+    elif pct >= summary.crit_pct:
         raise_alert(
             db,
             level="CRITICAL",

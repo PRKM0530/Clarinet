@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Privacy{% endblock %}
+{% block content %}
+<div class="auth-card" style="max-width:720px;text-align:left">
+  <div class="auth-title">What Clarinet collects</div>
+  <div class="auth-sub">Clarinet watches the network it is installed on. This page lists exactly what it records and for how long.</div>
+
+  <h4 style="margin:20px 0 6px">What it records</h4>
+  <ul style="font-size:13.5px;line-height:1.7;color:var(--text-2);padding-left:20px">
+    <li><strong>Devices:</strong> the hardware address (MAC), network address (IP), device name, maker and when each device was last seen.</li>
+    <li><strong>How much data each device uses:</strong> bytes downloaded and uploaded, per device, per hour.</li>
+    <li><strong>Connection quality:</strong> speed test results and how quickly the router and the internet respond.</li>
+    <li><strong>Security observations:</strong> nearby Wi-Fi network names, the router's settings checks, and the networks this server has connected to.</li>
+    <li><strong>Accounts and actions:</strong> usernames, scrambled (hashed) passwords, login attempts, and a log of what administrators change.</li>
+  </ul>
+
+  <h4 style="margin:20px 0 6px">What it does not record</h4>
+  <ul style="font-size:13.5px;line-height:1.7;color:var(--text-2);padding-left:20px">
+    <li>The content of your traffic: no messages, pages, passwords or files.</li>
+    <li>Which websites or apps you visit. Only the amount of data is counted.</li>
+  </ul>
+
+  <h4 style="margin:20px 0 6px">How long it is kept</h4>
+  <ul style="font-size:13.5px;line-height:1.7;color:var(--text-2);padding-left:20px">
+    <li>Hourly usage per device: {{ traffic_days }} days, then deleted automatically.</li>
+    <li>Short-term traffic samples: {{ sample_hours }} hours.</li>
+    <li>Login attempts: {{ login_days }} days.</li>
+    <li>Everything else stays until an administrator deletes it (Settings, Delete stored data).</li>
+  </ul>
+
+  <h4 style="margin:20px 0 6px">Where it goes</h4>
+  <p style="font-size:13.5px;line-height:1.7;color:var(--text-2)">
+    Nothing leaves your network. Clarinet runs on your own hardware and has no cloud account and no tracking.
+    The only outside contact is the speed test and the checks of public servers that measure response time;
+    neither carries any information about you or your devices.
+  </p>
+
+  <p style="font-size:13px;color:var(--text-3);margin-top:20px">
+    The person who runs this Clarinet is responsible for telling the people on the network that it is in use.
+  </p>
+  <p style="margin-top:16px"><a href="{{ '/dashboard' if user else '/login' }}" class="btn btn-secondary btn-sm">&larr; Back</a></p>
+</div>
+{% endblock %}

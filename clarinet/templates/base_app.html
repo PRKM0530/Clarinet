@@ -67,7 +67,8 @@
   {% endif %}
 
   <!-- Sidebar footer -->
-  <div class="sidebar-footer">
+  <a href="/privacy" class="sidebar-link" style="font-size:12px"><i class="bi bi-shield-lock"></i> Privacy</a>
+    <div class="sidebar-footer">
     <div class="sidebar-user">
       <div class="sidebar-avatar">{{ user.username[0].upper() }}</div>
       <div>
@@ -99,17 +100,41 @@
   </header>
 
   <!-- Flash messages -->
+  {# Short codes used in redirects, shown as plain sentences. Unknown text is shown as it is. #}
+  {% set flash_text = {
+    'forbidden': 'You do not have access to that page. It is only for administrators.',
+    'not_found': 'That item could not be found.',
+    'bad_owner': 'That member does not exist or is disabled.',
+    'confirm_delete': 'Nothing was deleted. Type DELETE in capitals to confirm.',
+    'data_deleted': 'All stored network data was deleted.',
+    'bad_limit': 'The data limit must be a positive number of GB.',
+    'cannot_disable_self': 'You cannot disable your own account.',
+    'username_taken': 'That username is already taken.',
+    'password_too_short': 'The password is too short (at least 8 characters).',
+    'monitor_mode_only': 'This needs full-control mode. Clarinet is currently only monitoring.',
+    'approved': 'Device approved.',
+    'blocked': 'Device blocked.',
+    'unblocked': 'Device unblocked.',
+    'renamed': 'Device renamed.',
+    'owner_set': 'Device owner saved.',
+    'deleted': 'Deleted.',
+    'saved': 'Settings saved.',
+    'member_created': 'Member created.',
+    'password_reset': 'Password reset.',
+    'acked': 'Alert acknowledged.',
+    'resolved': 'Alert resolved.'
+  } %}
   {% if error is defined and error %}
   <div class="flash-bar error" id="flash-error">
     <i class="bi bi-exclamation-circle-fill"></i>
-    {{ error }}
+    {{ flash_text.get(error, error) }}
     <button class="close-btn" onclick="this.parentElement.remove()">×</button>
   </div>
   {% endif %}
   {% if info is defined and info %}
   <div class="flash-bar success" id="flash-info">
     <i class="bi bi-check-circle-fill"></i>
-    {{ info }}
+    {{ flash_text.get(info, info) }}
     <button class="close-btn" onclick="this.parentElement.remove()">×</button>
   </div>
   {% endif %}

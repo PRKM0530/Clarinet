@@ -107,6 +107,40 @@ def resolve_alert_route(alert_id: int, request: Request, db: Session = Depends(g
     )
 
 
+@router.get("/export/alerts.csv")
+def export_alerts_csv(request: Request, db: Session = Depends(get_db)):
+    """CSV of the alerts the user may see (everything for admins)."""
+    result = require_login(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+
+    import csv
+    import io
+    from fastapi.responses import Response
+    from clarinet.core_svc.permissions import visible_alerts
+    from clarinet.models import Alert
+
+    def safe(value):
+        # A cell starting with = + - @ would run as a formula when opened in a spreadsheet.
+        text = "" if value is None else str(value)
+        return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["alert_id", "raised_at", "level", "type", "status", "device_id", "title", "message"])
+    for a in visible_alerts(db, user).order_by(Alert.raised_at.desc()).all():
+        writer.writerow([
+            a.alert_id, a.raised_at.isoformat() if a.raised_at else "", a.level, a.type,
+            a.status, a.device_id or "", safe(a.title), safe(a.message),
+        ])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=alerts.csv"},
+    )
+
+
 @router.get("/api/devices/summary")
 def api_devices_summary(request: Request, db: Session = Depends(get_db)):
     """

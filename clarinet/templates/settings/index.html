@@ -57,6 +57,12 @@
           <input type="number" name="billing_day" class="form-input"
                  value="{{ cfg.get('billing_day', '1') }}" min="1" max="28" />
         </div>
+        <div class="form-group">
+          <label class="form-label">Monthly data limit (GB, leave empty for no limit)</label>
+          <input type="number" name="monthly_limit_gb" class="form-input" min="1" step="1"
+                 value="{{ ((cfg.get('limit.bytes')|int) / 1073741824)|round(0)|int if cfg.get('limit.bytes') else '' }}" />
+          <div style="font-size:11.5px;color:var(--text-3);margin-top:4px">Clarinet warns at 70%, 90% and 100% of this amount.</div>
+        </div>
         <hr class="divider" />
         <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:12px">Slowdown Detection</div>
         <div class="form-row">
@@ -192,6 +198,24 @@
       </div>
     </form>
   </div>
+</div>
+
+<div class="card" style="margin-top:20px;border:1px solid var(--red)">
+  <div class="card-header">
+    <i class="bi bi-trash3" style="color:var(--red)"></i>
+    <span class="card-header-title">Delete stored data</span>
+  </div>
+  <form method="post" action="/settings/purge" style="padding:16px"
+        onsubmit="return confirm('Delete all devices, usage, alerts and history? This cannot be undone.')">
+    <p style="font-size:13px;color:var(--text-2);margin-top:0">
+      Removes every device, usage record, alert, speed test and history entry. Member accounts, settings,
+      the audit log and your trusted access points are kept. Type <strong>DELETE</strong> to confirm.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="text" name="confirm" class="form-input" style="max-width:180px" placeholder="DELETE" autocomplete="off" />
+      <button class="btn btn-danger" type="submit">Delete all data</button>
+    </div>
+  </form>
 </div>
 {% endblock %}
 

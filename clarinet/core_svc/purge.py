@@ -82,22 +82,35 @@ def purge_device(db: Session, device_id: int) -> bool:
     return True
 
 
+# Tables that are configuration or accountability, not collected network data.
+KEEP_TABLES = {
+    "member", "settings", "audit_log", "login_attempt", "setup_progress",
+    "trusted_access_point", "known_network",
+}
+
+
 def purge_all_data(db: Session) -> dict[str, int]:
     """
-    Factory reset: delete all network data (devices, usage, alerts, history).
-    Keeps: Member accounts, Settings, AuditLog.
-    Returns counts of deleted rows per table.
+    Delete all collected network data: devices, usage, alerts, history, speed
+    tests, latency, slowdowns, rules, vouchers, security observations.
+    Keeps member accounts, settings, the audit log and the trusted access
+    point / known network decisions.
+
+    Works from the table metadata, children first, so tables added later are
+    covered and foreign keys are never violated.
+    Returns the number of rows deleted per table (only tables that had rows).
     """
-    from clarinet.models import Alert, Device, DeviceHistory, UsageRecord
+    from clarinet.database import Base
+    import clarinet.models  # noqa: F401  (make sure every table is registered)
 
     counts: dict[str, int] = {}
-
-    counts["usage_records"] = db.query(UsageRecord).delete()
-    counts["alerts"] = db.query(Alert).delete()
-    counts["device_history"] = db.query(DeviceHistory).delete()
-    counts["devices"] = db.query(Device).delete()
+    for table in reversed(Base.metadata.sorted_tables):
+        if table.name in KEEP_TABLES:
+            continue
+        deleted = db.execute(table.delete()).rowcount or 0
+        if deleted:
+            counts[table.name] = deleted
 
     db.commit()
-    log.warning("Factory reset executed: %s", counts)
+    log.warning("All stored data deleted: %s", counts)
     return counts
-

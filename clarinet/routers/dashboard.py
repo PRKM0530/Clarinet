@@ -114,6 +114,14 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Monthly data limit progress (the whole connection's usage, so admins only)
+    limit = None
+    if user.is_admin:
+        from clarinet.core_svc.limit_service import get_limit_summary
+        summary = get_limit_summary(db)
+        if summary.bytes_limit:
+            limit = summary
+
     # Members don't review unapproved devices
     if not user.is_admin:
         new_devices = None
@@ -132,6 +140,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         # data
         "recent_alerts": recent_alerts,
         "latest_speed": latest_speed,
+        "limit": limit,
         "avg_latency": avg_latency,
         "active_slowdown": active_slowdown,
         "top_devices": top_devices,

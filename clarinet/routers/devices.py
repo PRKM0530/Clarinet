@@ -93,12 +93,19 @@ def device_detail(device_id: int, request: Request, db: Session = Depends(get_db
         .all()
     )
 
+    from clarinet.models import Member
+    members = (
+        db.query(Member).filter(Member.is_active == True).order_by(Member.username).all()  # noqa: E712
+        if user.is_admin else []
+    )
+
     return templates.TemplateResponse("devices/detail.html", {
         "request": request,
         "user": user,
         "page": "devices",
         "device": device,
         "history": history,
+        "members": members,
         "info": request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })
@@ -139,8 +146,31 @@ def rename_device(
     return RedirectResponse(url=f"/devices/{device_id}?info=renamed", status_code=302)
 
 
+def _parse_owner(db, raw: str | None):
+    """
+    Turn the owner form value into a member id.
+    Returns (member_id_or_None, ok). Empty means "no owner"; an unknown or
+    disabled member is rejected so a device never ends up owned by nobody real.
+    """
+    from clarinet.models import Member
+    if raw is None or raw.strip() == "":
+        return None, True
+    if not raw.strip().isdigit():
+        return None, False
+    member = db.get(Member, int(raw))
+    if member is None or not member.is_active:
+        return None, False
+    return member.member_id, True
+
+
 @router.post("/devices/{device_id}/approve")
-def approve_device(device_id: int, request: Request, db: Session = Depends(get_db)):
+def approve_device(
+    device_id: int,
+    request: Request,
+    label: str | None = Form(None),
+    owner_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
     result = require_admin(request, db)
     if isinstance(result, RedirectResponse):
         return result
@@ -153,14 +183,61 @@ def approve_device(device_id: int, request: Request, db: Session = Depends(get_d
     if device is None:
         return RedirectResponse(url="/devices?error=not_found", status_code=302)
 
+    new_owner, ok = _parse_owner(db, owner_id)
+    if not ok:
+        return RedirectResponse(url="/devices?error=bad_owner", status_code=302)
+
     old_state = device.state
     device.state = "APPROVED"
+    if label and label.strip():
+        device.label = label.strip()[:128]
+    # Approving without choosing an owner keeps whatever owner was already set.
+    if owner_id is not None and owner_id.strip() != "":
+        device.owner_member_id = new_owner
     db.add(DeviceEvent(
         device_id=device_id, event_type="STATE_CHANGE",
         old_value=old_state, new_value="APPROVED", actor_id=user.member_id,
     ))
-    audit(db, user.member_id, "APPROVE_DEVICE", "Device", device_id)
+    audit(db, user.member_id, "APPROVE_DEVICE", "Device", device_id,
+          {"label": device.label, "owner_id": device.owner_member_id})
     return RedirectResponse(url=f"/devices/{device_id}?info=approved", status_code=302)
+
+
+@router.post("/devices/{device_id}/owner")
+def set_device_owner(
+    device_id: int,
+    request: Request,
+    owner_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    """Assign a device to a member, or clear the owner (empty value)."""
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+
+    from clarinet.models import Device
+    from clarinet.models.devices_ext import DeviceEvent
+
+    device = db.get(Device, device_id)
+    if device is None:
+        return RedirectResponse(url="/devices?error=not_found", status_code=302)
+
+    new_owner, ok = _parse_owner(db, owner_id)
+    if not ok:
+        return RedirectResponse(url=f"/devices/{device_id}?error=bad_owner", status_code=302)
+
+    old_owner = device.owner_member_id
+    device.owner_member_id = new_owner
+    db.add(DeviceEvent(
+        device_id=device_id, event_type="OWNER_CHANGE",
+        old_value=str(old_owner) if old_owner else None,
+        new_value=str(new_owner) if new_owner else None,
+        actor_id=user.member_id,
+    ))
+    audit(db, user.member_id, "SET_DEVICE_OWNER", "Device", device_id,
+          {"old_owner_id": old_owner, "new_owner_id": new_owner})
+    return RedirectResponse(url=f"/devices/{device_id}?info=owner_set", status_code=302)
 
 
 @router.post("/devices/{device_id}/block")

@@ -59,6 +59,8 @@ def wizard_create_admin(
     plan_download: float = Form(100.0),
     plan_upload: float = Form(20.0),
     billing_day: int = Form(1),
+    monthly_limit_gb: str = Form(""),
+    consent: str = Form(""),
     db: Session = Depends(get_db),
 ):
     if _setup_done(db):
@@ -77,6 +79,21 @@ def wizard_create_admin(
         errors.append("Invalid network mode.")
     if not (1 <= billing_day <= 28):
         errors.append("Billing day must be between 1 and 28.")
+
+    # NFR-21: the administrator confirms they are allowed to monitor this network
+    if consent != "yes":
+        errors.append("Please confirm that you are allowed to monitor this network.")
+
+    limit_bytes = ""
+    if monthly_limit_gb.strip():
+        try:
+            gb = float(monthly_limit_gb)
+        except ValueError:
+            gb = -1
+        if not (0 < gb <= 1_000_000):
+            errors.append("Monthly data limit must be a positive number of GB, or empty for no limit.")
+        else:
+            limit_bytes = str(int(gb * 1_073_741_824))
 
     # Check username isn't taken
     existing = db.query(Member).filter(Member.username == username).first()
@@ -112,6 +129,8 @@ def wizard_create_admin(
     _set(db, "plan_download_mbps", str(plan_download))
     _set(db, "plan_upload_mbps", str(plan_upload))
     _set(db, "billing_day", str(billing_day))
+    if limit_bytes:
+        _set(db, "limit.bytes", limit_bytes)
     _set(db, "setup_complete", "true")
     db.commit()
 

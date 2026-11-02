@@ -53,7 +53,27 @@ function setWsState(state) {
 function onAlert(data) {
   showToast(data);
   bumpAlertBadge();
+  browserNotify(data);
 }
+
+// Browser notifications (DASH-3): shown while the dashboard is open, in addition to the toast.
+// Browsers only allow asking for permission after a click, so ask once, on the first click.
+function browserNotify(data) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    new Notification(data.title || 'Clarinet alert', { body: data.message || '', tag: String(data.alert_id || data.title) });
+  } catch (e) { /* notifications are optional */ }
+}
+
+document.addEventListener('click', function askForNotifications() {
+  try {
+    if ('Notification' in window && Notification.permission === 'default' && !localStorage.getItem('notifAsked')) {
+      localStorage.setItem('notifAsked', '1');
+      Notification.requestPermission();
+    }
+  } catch (e) { /* ignore */ }
+  document.removeEventListener('click', askForNotifications);
+});
 
 function bumpAlertBadge() {
   const badge = document.querySelector('a[href="/alerts"] .sidebar-badge');
