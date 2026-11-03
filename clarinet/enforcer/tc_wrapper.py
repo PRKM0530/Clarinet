@@ -72,6 +72,17 @@ def setup_htb(interface: str, plan_mbps: float) -> bool:
     return True
 
 
+def ensure_htb(interface: str, plan_mbps: float) -> bool:
+    """Build the shaping tree only if the interface does not have one yet (setup_htb would wipe existing limits)."""
+    try:
+        shown = subprocess.run(["tc", "qdisc", "show", "dev", interface], capture_output=True, text=True, timeout=5)
+        if shown.returncode == 0 and "htb 1:" in shown.stdout:
+            return True
+    except Exception:
+        pass
+    return setup_htb(interface, plan_mbps)
+
+
 def _minor(mac: str) -> int:
     """Stable class number for a device, from the last two bytes of its MAC (kept above the reserved classes)."""
     parts = mac.split(":")

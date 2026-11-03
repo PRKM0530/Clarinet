@@ -99,6 +99,7 @@ def start_sniffer(interface: str) -> bool:
         if _started:
             return True
         try:
+            import scapy.layers.dns, scapy.layers.inet, scapy.layers.l2      # noqa: F401  (else packets decode as Raw)
             from scapy.sendrecv import sniff
         except ImportError:
             log.info("Activity classification off: Scapy not installed")

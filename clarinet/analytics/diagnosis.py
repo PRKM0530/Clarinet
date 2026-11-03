@@ -55,6 +55,21 @@ def check_slowdown(ping_results: "dict[str, PingResult]") -> None:
         log.error("check_slowdown error: %s", exc)
 
 
+def _best_internet_ping(ping_results):
+    """
+    The internet measurement to judge. Two public targets are pinged; losing only one of them says
+    nothing about the connection (that one server may be down), so use the better of the two and treat
+    the connection as down only when neither answers.
+    """
+    candidates = [ping_results.get(k) for k in ("google_dns", "cloudflare") if ping_results.get(k) is not None]
+    if not candidates:
+        return None
+    alive = [p for p in candidates if p.reachable and p.packet_loss < 0.98]
+    if not alive:
+        return candidates[0]
+    return min(alive, key=lambda p: (p.packet_loss, p.avg_ms if p.avg_ms is not None else 9999.0))
+
+
 def _check_slowdown_inner(ping_results: "dict[str, PingResult]") -> None:
     global _consecutive_bad
 
@@ -65,7 +80,7 @@ def _check_slowdown_inner(ping_results: "dict[str, PingResult]") -> None:
         get_baseline_for_now, latency_is_elevated, is_baseline_ready
     )
 
-    internet_ping = ping_results.get("google_dns") or ping_results.get("cloudflare")
+    internet_ping = _best_internet_ping(ping_results)
     router_ping = ping_results.get("router")
 
     if internet_ping is None:

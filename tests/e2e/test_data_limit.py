@@ -98,7 +98,6 @@ def test_usg05_period_boundaries_for_billing_days_1_and_28(world, billing_day):
     assert start <= today <= end and start.day == billing_day
 
 
-@pytest.mark.xfail(strict=True, reason="S-10: exceeding the limit never calls enforcer.limits.throttle_low_priority")
 def test_s10_exceeding_the_limit_triggers_the_throttle(world, monkeypatch):
     called = []
     monkeypatch.setattr("clarinet.enforcer.limits.throttle_low_priority", lambda *a, **k: called.append(a))

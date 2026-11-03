@@ -81,6 +81,12 @@ def reconcile_now(db=None) -> None:
                 return
 
             iface = get_setting(session, "network_interface", "")
+            if iface:
+                try:
+                    from clarinet.enforcer.tc_wrapper import ensure_htb
+                    ensure_htb(iface, float(get_setting(session, "plan_download_mbps", "100") or 100))
+                except Exception as exc:
+                    log.debug("shaping tree not ready: %s", exc)
             # Administrator blocks
             wanted = {d.mac_address.lower(): d.ip_address for d in devices if d.state == "BLOCKED"}
             have = nft.macs_with_rules(nft.NFT_CHAIN_BLOCK, "block")

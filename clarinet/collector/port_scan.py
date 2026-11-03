@@ -92,6 +92,7 @@ def start_sniffer(interface: str) -> bool:
         if _sniffer_started:
             return True
         try:
+            import scapy.layers.inet, scapy.layers.l2           # noqa: F401  (without these every packet decodes as Raw)
             from scapy.sendrecv import sniff
         except ImportError:
             log.info("Port-scan detection off: Scapy not installed")

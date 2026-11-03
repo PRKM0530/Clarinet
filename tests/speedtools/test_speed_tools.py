@@ -63,7 +63,6 @@ def test_a_hung_tool_is_given_up_on(tools, monkeypatch):
     assert run_cli() is None
 
 
-@pytest.mark.xfail(strict=True, reason="N-14: a tool that prints null for a speed raises TypeError out of the speed-test thread")
 def test_tool_with_null_values_does_not_crash(tools):
     tools("speedtest", json.dumps({"download": {"bandwidth": None}, "upload": {"bandwidth": 1}, "ping": {"latency": 1}}))
     assert run_cli() is None

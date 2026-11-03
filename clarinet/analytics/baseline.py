@@ -23,6 +23,7 @@ log = logging.getLogger("clarinet.analytics.baseline")
 
 BASELINE_WINDOW_DAYS = 7
 MIN_SAMPLES_READY = 20           # minimum PingRecord rows before baseline is "ready"
+MIN_HISTORY_HOURS = 24           # ...and they must cover at least a day, so every hour of the day has been seen
 OUTLIER_IQR_FACTOR = 1.5        # IQR-based outlier rejection factor
 
 
@@ -118,26 +119,53 @@ def _reject_outliers(values: list[float]) -> list[float]:
 
 
 def get_baseline_for_now(db) -> "Baseline | None":
-    """Return the baseline row for the current UTC hour and day-of-week."""
+    """
+    The expected latency for the current hour.
+
+    Preferred: the row for this weekday and hour. A new install only has a few days of data, so most
+    weekday-hour rows are empty; then fall back to the same hour on other days, and finally to the overall
+    average. With no rows at all but enough ping history, the baseline is built now rather than at 03:00.
+    """
+    from types import SimpleNamespace
     from clarinet.models import Baseline
+
+    rows = db.query(Baseline).all()
+    if not rows and is_baseline_ready(db):
+        rebuild_all(db)
+        rows = db.query(Baseline).all()
+    if not rows:
+        return None
+
     now = datetime.now(timezone.utc)
-    return (
-        db.query(Baseline)
-        .filter(Baseline.hour == now.hour, Baseline.day_of_week == now.weekday())
-        .first()
-    )
+    for row in rows:
+        if row.hour == now.hour and row.day_of_week == now.weekday():
+            return row
+
+    def blend(chosen):
+        weight = sum(r.sample_count or 1 for r in chosen)
+        avg = sum((r.avg_latency_ms or 0) * (r.sample_count or 1) for r in chosen) / weight
+        std = sum((r.std_latency_ms or 0) * (r.sample_count or 1) for r in chosen) / weight
+        return SimpleNamespace(avg_latency_ms=round(avg, 1), std_latency_ms=round(std, 1), sample_count=weight)
+
+    same_hour = [r for r in rows if r.hour == now.hour]
+    return blend(same_hour or rows)
 
 
 def is_baseline_ready(db) -> bool:
-    """Return True if there are enough samples to trust the baseline."""
+    """True once there are enough reachable pings, spanning at least a day, to trust a baseline."""
     from clarinet.models import PingRecord
+    from sqlalchemy import func
     cutoff = datetime.now(timezone.utc) - timedelta(days=BASELINE_WINDOW_DAYS)
-    count = (
-        db.query(PingRecord)
-        .filter(PingRecord.measured_at >= cutoff, PingRecord.reachable == True)
-        .count()
+    count, oldest = (
+        db.query(func.count(PingRecord.record_id), func.min(PingRecord.measured_at))
+        .filter(PingRecord.measured_at >= cutoff, PingRecord.reachable == True)  # noqa: E712
+        .one()
     )
-    return count >= MIN_SAMPLES_READY
+    if count < MIN_SAMPLES_READY or oldest is None:
+        return False
+    if oldest.tzinfo is None:
+        oldest = oldest.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - oldest >= timedelta(hours=MIN_HISTORY_HOURS)
 
 
 def latency_is_elevated(current_ms: float, baseline: "Baseline | None", multiplier: float = 2.0) -> bool:

@@ -121,6 +121,19 @@ def get_limit_summary(db: Session) -> LimitSummary:
     )
 
 
+def _apply_throttle(db: Session, over_limit: bool) -> None:
+    """At 100 percent, slow every approved device down; once back under the limit, release them."""
+    try:
+        from clarinet.enforcer import limits
+        if over_limit:
+            limits.throttle_low_priority(db)
+        else:
+            limits.release_throttle()
+    except Exception as exc:
+        import logging
+        logging.getLogger("clarinet.limit").debug("throttle call failed: %s", exc)
+
+
 def check_and_alert(db: Session) -> None:
     """
     Called by the limit_check job every 5 min.
@@ -134,6 +147,7 @@ def check_and_alert(db: Session) -> None:
     from clarinet.core_svc.alerts import raise_alert
 
     pct = summary.pct_used or 0.0
+    _apply_throttle(db, pct >= 1.0)
     used_gb = summary.gb_used
     limit_gb = round(summary.bytes_limit / 1_073_741_824, 1)
 

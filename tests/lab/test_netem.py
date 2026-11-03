@@ -62,7 +62,7 @@ def seed_baseline(ms=5.0):
     now = datetime.now(timezone.utc)
     with SessionLocal() as db:
         for i in range(60):
-            db.add(PingRecord(measured_at=now - timedelta(minutes=i * 10), target="google_dns", host="8.8.8.8",
+            db.add(PingRecord(measured_at=now - timedelta(minutes=i * 30), target="google_dns", host="8.8.8.8",
                               avg_ms=ms + (i % 3) * 0.2, min_ms=ms, max_ms=ms + 1, packet_loss=0.0, reachable=True))
         db.commit()
     rebuild_all()
@@ -240,7 +240,6 @@ def test_prf04_collective_congestion_when_three_devices_each_use_a_third(world):
     assert events()[0][0][0][0]["cause"] == "COLLECTIVE_CONGESTION"
 
 
-@pytest.mark.xfail(strict=True, reason="S-16: losing only 8.8.8.8 is reported as a full outage although 1.1.1.1 still works")
 def test_s16_one_dead_public_target_is_not_an_outage_in_the_lab():
     from clarinet.collector.pinger import ping_host
     seed_baseline()

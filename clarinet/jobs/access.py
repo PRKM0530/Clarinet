@@ -162,8 +162,8 @@ def expire_vouchers() -> None:
         _check_data_cap_exceeded(db, now)
 
         total = len(unused_expired) + len(active_expired)
+        db.commit()                                   # also saves vouchers expired by their data cap
         if total:
-            db.commit()
             log.info("Expired %d voucher(s) (%d active)", total, len(active_expired))
 
 

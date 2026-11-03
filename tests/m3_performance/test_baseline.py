@@ -157,10 +157,10 @@ def test_is_baseline_ready_false_when_few_samples(db):
 
 
 def test_is_baseline_ready_true_when_enough_samples(db):
-    """is_baseline_ready returns True when >= 20 recent PingRecord rows exist."""
+    """is_baseline_ready returns True with >= 20 recent PingRecord rows that span at least a day."""
     now = datetime.now(timezone.utc)
-    for _ in range(25):
-        _ping(db, measured_at=now)
+    for i in range(25):
+        _ping(db, measured_at=now - timedelta(hours=i * 1.2))      # 29 hours of history
     db.commit()
 
     assert is_baseline_ready(db) is True

@@ -181,6 +181,13 @@ def _write_deltas(deltas: dict[str, tuple[int, int]]) -> None:
                 rec.bytes_in += bytes_in
                 rec.bytes_out += bytes_out
 
+                # A guest on a voucher with a data cap: this is what the cap is measured against
+                from sqlalchemy import func
+                from clarinet.models.guest import EnforcementStatus
+                status = db.query(EnforcementStatus).filter(func.lower(EnforcementStatus.mac) == mac.lower()).first()
+                if status is not None:
+                    status.bytes_used = (status.bytes_used or 0) + bytes_in + bytes_out
+
             db.commit()
 
 

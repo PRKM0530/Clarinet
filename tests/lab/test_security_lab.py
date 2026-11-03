@@ -167,7 +167,6 @@ def _scan_and_wait():
 
 # This test must run BEFORE the next one: it relies on Scapy's layers not having been imported yet,
 # which is exactly the state the app is in when its start-up job begins sniffing.
-@pytest.mark.xfail(strict=True, reason="N-13: the sniffer imports only scapy.sendrecv, packets decode as Raw and no scan is ever seen")
 def test_sec03_app_started_sniffer_sees_a_real_nmap_scan(world):
     from clarinet.collector import port_scan
     _attacker_device(world)

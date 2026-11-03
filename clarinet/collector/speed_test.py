@@ -62,7 +62,7 @@ def _run_speedtest_cli() -> dict | None:
                 "server_host": data.get("server", {}).get("host"),
                 "tool": "ookla",
             }
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, AttributeError, IndexError):
         pass
 
     # Try speedtest-cli (Python, older open-source)
@@ -80,7 +80,7 @@ def _run_speedtest_cli() -> dict | None:
                 "server_host": data.get("server", {}).get("host"),
                 "tool": "speedtest-cli",
             }
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError):
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, AttributeError, IndexError):
         pass
 
     # Try librespeed-cli (correct flags: no --no-download / --no-upload)
@@ -100,7 +100,7 @@ def _run_speedtest_cli() -> dict | None:
                 "server_host": data.get("server", {}).get("name") if isinstance(data.get("server"), dict) else None,
                 "tool": "librespeed",
             }
-    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError, TypeError):
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, AttributeError, IndexError):
         pass
 
     return None

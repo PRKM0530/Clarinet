@@ -25,7 +25,7 @@ def world():
     diagnosis._consecutive_bad = 0
 
 
-def seed_pings(count=40, ms=20.0, spread_hours=12):
+def seed_pings(count=40, ms=20.0, spread_hours=30):
     from clarinet.database import SessionLocal
     from clarinet.models import PingRecord
     now = datetime.now(timezone.utc)
@@ -64,13 +64,13 @@ def ready_baseline():
 
 def test_prf03_slow_latency_needs_two_samples_then_opens_one_event_and_closes():
     ready_baseline()
-    slow = ping("google_dns", ms=400.0)
-    sample(google=slow)
+    slow, slow_cf = ping("google_dns", ms=400.0), ping("cloudflare", ms=400.0)
+    sample(google=slow, cloudflare=slow_cf)
     assert events_and_alerts() == ([], [])                     # one bad sample is only held
-    sample(google=slow)
+    sample(google=slow, cloudflare=slow_cf)
     events, alerts = events_and_alerts()
     assert len(events) == 1 and alerts == ["SLOWDOWN"]
-    sample(google=slow)
+    sample(google=slow, cloudflare=slow_cf)
     assert len(events_and_alerts()[0]) == 1                   # not reopened while it continues
     sample()                                                  # back to normal
     events, _ = events_and_alerts()
@@ -91,22 +91,20 @@ def test_prf03_total_outage_is_critical_and_labelled_outage():
 
 def test_prf03_packet_loss_alone_opens_a_slowdown():
     ready_baseline()
-    lossy = ping("google_dns", loss=0.2)
-    sample(google=lossy)
-    sample(google=lossy)
+    lossy, lossy_cf = ping("google_dns", loss=0.2), ping("cloudflare", loss=0.2)
+    sample(google=lossy, cloudflare=lossy_cf)
+    sample(google=lossy, cloudflare=lossy_cf)
     assert events_and_alerts()[1] == ["SLOWDOWN"]
 
 
-@pytest.mark.xfail(strict=True, reason="S-16: losing only 8.8.8.8 is reported as a full outage although 1.1.1.1 works")
 def test_s16_one_dead_ping_target_is_not_an_outage():
     ready_baseline()
     down = ping("google_dns", reachable=False, loss=1.0)
-    sample(google=down)
+    sample(google=down)                       # 1.1.1.1 keeps answering
     sample(google=down)
     assert "OUTAGE" not in events_and_alerts()[1]
 
 
-@pytest.mark.xfail(strict=True, reason="S-17: 20 recent pings count as a 'ready' baseline; the design asks for 7 days of history")
 def test_s17_baseline_is_not_ready_after_one_hour_of_samples():
     from clarinet.analytics.baseline import is_baseline_ready
     from clarinet.database import SessionLocal
@@ -115,10 +113,9 @@ def test_s17_baseline_is_not_ready_after_one_hour_of_samples():
         assert is_baseline_ready(db) is False
 
 
-@pytest.mark.xfail(strict=True, reason="S-17: no baseline rows exist before the 03:00 rebuild, so a slow line is never flagged until then")
 def test_s17_slowdown_is_detected_before_the_first_nightly_rebuild():
     seed_pings()            # enough samples, but rebuild_all() has not run yet
-    slow = ping("google_dns", ms=400.0)
-    sample(google=slow)
-    sample(google=slow)
+    slow, slow_cf = ping("google_dns", ms=400.0), ping("cloudflare", ms=400.0)
+    sample(google=slow, cloudflare=slow_cf)
+    sample(google=slow, cloudflare=slow_cf)
     assert events_and_alerts()[1] == ["SLOWDOWN"]

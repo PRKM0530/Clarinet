@@ -19,7 +19,6 @@ def world():
 
 
 # S-09: cancelling a priority grant must still charge the minutes that were used
-@pytest.mark.xfail(strict=True, reason="S-09: only the expiry job charges fairness minutes; cancel skips it")
 def test_s09_cancelled_priority_counts_against_the_daily_limit(world):
     from clarinet.database import SessionLocal
     from clarinet.models import PriorityGrant
@@ -69,7 +68,6 @@ def _active_voucher_over_cap(world):
         return v.voucher_id
 
 
-@pytest.mark.xfail(strict=True, reason="S-05: cap expiry is never committed when no voucher has timed out")
 def test_s05_voucher_over_its_data_cap_is_expired_and_saved(world):
     from clarinet.database import SessionLocal
     from clarinet.jobs.access import expire_vouchers
@@ -80,7 +78,6 @@ def test_s05_voucher_over_its_data_cap_is_expired_and_saved(world):
         assert db.get(Voucher, vid).status == "EXPIRED"
 
 
-@pytest.mark.xfail(strict=True, reason="S-05: nothing writes EnforcementStatus.bytes_used")
 def test_s05_something_in_the_app_updates_bytes_used():
     """S-05 root cause: bytes_used must be written somewhere under clarinet/ (static check)."""
     import pathlib, re
@@ -119,7 +116,6 @@ def test_s14_a_truly_idle_session_does_time_out(world, monkeypatch):
 
 
 # S-23: contract paths documented in the team brief
-@pytest.mark.xfail(strict=True, reason="S-23: /api/slowdowns/summary is documented but only /slowdowns/api/slowdowns/summary exists")
 def test_s23_documented_slowdown_summary_path_is_served(world):
     assert new_client(ADMIN).get("/api/slowdowns/summary").status_code == 200
 

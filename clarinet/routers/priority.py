@@ -232,7 +232,7 @@ def _apply_priority(db, device: Device, grant: PriorityGrant) -> None:
     """Apply tc priority shaping for this device."""
     try:
         from clarinet.app_settings import get_setting
-        from clarinet.enforcer.tc_wrapper import setup_htb, set_priority
+        from clarinet.enforcer.tc_wrapper import ensure_htb as setup_htb, set_priority
         iface = get_setting(db, "network_interface", "")
         plan_dl = float(get_setting(db, "plan_download_mbps", "100") or 100)
         if iface:
@@ -258,8 +258,15 @@ def cancel_priority(grant_id: int, request: Request, db: Session = Depends(get_d
     if grant.decision not in ("APPROVED", "PENDING"):
         return RedirectResponse(url="/priority?error=Grant+cannot+be+cancelled", status_code=302)
 
+    now = datetime.now(timezone.utc)
+    if grant.decision == "APPROVED" and grant.expires_at is not None and grant.duration_min:
+        end = grant.expires_at if grant.expires_at.tzinfo else grant.expires_at.replace(tzinfo=timezone.utc)
+        remaining = max(0.0, (end - now).total_seconds() / 60)
+        used = min(grant.duration_min, max(0, round(grant.duration_min - remaining)))
+        from clarinet.jobs.access import _record_fairness_used
+        _record_fairness_used(db, grant.member_id, used)          # the daily limit counts time actually used
     grant.decision = "EXPIRED"
-    grant.expires_at = datetime.now(timezone.utc)
+    grant.expires_at = now
     audit(db, user.member_id, "CANCEL_PRIORITY", "PriorityGrant", grant_id, {})
 
     # Remove tc priority
