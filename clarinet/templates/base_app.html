@@ -31,6 +31,8 @@
     {{ nav_link('/devices', 'devices', 'bi-hdd-network', 'Devices') }}
     {% if enforcing %}
     {{ nav_link('/rules', 'rules', 'bi-clock', 'Time rules') }}
+    {% endif %}
+    {% if quarantine %}
     {{ nav_link('/vouchers', 'guest', 'bi-ticket-perforated', 'Guest vouchers') }}
     {% endif %}
   </div>
@@ -104,7 +106,7 @@
 
   {% if enforce_problem and user.is_admin %}
   <div class="flash-bar error" role="alert" id="enforce-problem">
-    <span><strong>Full Control cannot change the network right now.</strong> {{ enforce_problem|capitalize }}. Blocks, time rules, speed limits and vouchers are saved but have no effect until this is fixed. Start Clarinet as root on the router, or switch to Monitor mode in Settings.</span>
+    <span><strong>{{ 'Public mode' if net_mode == 'PUBLIC' else 'Full Control' }} cannot change the network right now.</strong> {{ enforce_problem|capitalize }}. Blocks, time rules, speed limits and vouchers are saved but have no effect until this is fixed. Start Clarinet as root on the router, or switch to Monitor mode in Settings.{% if net_mode == 'PUBLIC' %} Until then new devices are not held back.{% endif %}</span>
   </div>
   {% endif %}
 

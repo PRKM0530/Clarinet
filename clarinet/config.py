@@ -51,5 +51,21 @@ def get_settings() -> Settings:
     return Settings()
 
 
+UNSAFE_SECRET_KEYS = {"", "change-me", "changeme", "secret"}
+
+
+def check_secret_key(cfg: "Settings | None" = None) -> str | None:
+    """The session cookie is signed with SECRET_KEY, so anyone who knows it can forge a login.
+    Production refuses to start with the example value (RuntimeError); development returns a warning text."""
+    cfg = cfg or get_settings()
+    if cfg.SECRET_KEY.strip().lower() not in UNSAFE_SECRET_KEYS:
+        return None
+    message = ("SECRET_KEY is still the example value. Generate one with: "
+               "python -c \"import secrets; print(secrets.token_hex(32))\" and put it in .env")
+    if cfg.APP_ENV.lower() == "production":
+        raise RuntimeError(message)
+    return message
+
+
 # Convenient module-level alias used throughout the project
 settings = get_settings()

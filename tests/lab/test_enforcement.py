@@ -187,6 +187,39 @@ def test_gst02_closing_guest_access_removes_the_rules(world):
     assert f"guest_{world['mac_guest']}" not in nft_ruleset()
 
 
+# Public mode: a device nobody has approved is held back like a guest
+def _public_mode_with_guest_as_new():
+    from clarinet.database import SessionLocal
+    from clarinet.models import Device, Settings
+    with SessionLocal() as db:
+        db.get(Settings, "network_mode").value = "PUBLIC"
+        for d in db.query(Device).filter(Device.state == "GUEST"):
+            d.state = "NEW"
+        db.commit()
+
+
+def test_h6_public_mode_holds_back_a_new_device_but_not_an_approved_one(world):
+    from clarinet.enforcer.reconcile import reconcile_now
+    _public_mode_with_guest_as_new()
+    reconcile_now()
+    assert not can_reach("guest", INTERNET_IP), "a new device reached the internet in Public mode"
+    assert can_reach("a", INTERNET_IP), "an approved device was held back"
+
+
+def test_h6_public_mode_a_voucher_opens_the_way_and_approval_lifts_the_hold(world):
+    from clarinet.database import SessionLocal
+    from clarinet.enforcer.reconcile import reconcile_now
+    from clarinet.models import Device
+    _public_mode_with_guest_as_new()
+    reconcile_now()
+    assert not can_reach("guest", INTERNET_IP)
+    with SessionLocal() as db:
+        db.query(Device).filter(Device.mac_address == world["mac_guest"].upper()).one().state = "APPROVED"
+        db.commit()
+    reconcile_now()
+    assert can_reach("guest", INTERNET_IP), "approving a device did not lift the hold"
+
+
 # GST-06: time rules
 def _rule(world, action="BLOCK", rate=None):
     from clarinet.database import SessionLocal

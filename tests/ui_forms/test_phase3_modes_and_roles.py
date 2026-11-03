@@ -27,10 +27,14 @@ def test_features_that_need_full_control_are_hidden_outside_it(mode):
         c = new_client(who)
         page = c.get("/dashboard").text
         for path, _ in FULL_ONLY:
+            if mode == "PUBLIC" and path == "/vouchers":
+                continue                                          # Public mode holds new devices back until a voucher is used
             assert f'href="{path}"' not in page, f"{who[0]} in {mode} is offered {path}"
         for path, name in FULL_ONLY:
             if who == ALICE and path != "/priority":
                 continue                                          # members cannot open the others at all
+            if mode == "PUBLIC" and path == "/vouchers":
+                continue
             body = c.get(path).text
             assert "needs Full Control mode" in body, f"{who[0]} on {path} in {mode}"
 

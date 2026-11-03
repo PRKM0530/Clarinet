@@ -92,3 +92,118 @@ def test_reports_open_on_today():
     seed_world("MONITOR")
     r = new_client(ADMIN).get("/reports")
     assert r.status_code == 200
+
+
+# ── Phase 5: discovery, guests, and Public-mode quarantine ─────────────────────────────────────────────────
+
+def _reconcile_with_fake_nft(monkeypatch):
+    """Run the real reconcile with a recording stand-in for nftables."""
+    from clarinet.enforcer import accounting, nft_wrapper as nft, reconcile
+    calls = {"deny": [], "counted": None, "allow": [], "open": []}
+    monkeypatch.setattr(accounting, "sync_accounting", lambda devices: calls.__setitem__("counted", devices))
+    monkeypatch.setattr(nft, "ensure_table_exists", lambda: True)
+    monkeypatch.setattr(nft, "macs_with_rules", lambda chain, prefix: set())
+    monkeypatch.setattr(nft, "block_device", lambda *a, **k: True)
+    monkeypatch.setattr(nft, "unblock_device", lambda *a, **k: True)
+    monkeypatch.setattr(nft, "deny_guest", lambda mac: calls["deny"].append(mac) or True)
+    monkeypatch.setattr(nft, "close_guest_access", lambda mac: True)
+    monkeypatch.setattr(nft, "open_guest_access", lambda mac, **k: calls["open"].append(mac) or True)
+    monkeypatch.setattr(nft, "allow_guest_again", lambda mac: calls["allow"].append(mac))
+    reconcile.reconcile_now()
+    return calls
+
+
+def _device_states():
+    from clarinet.database import SessionLocal
+    from clarinet.models import Device
+    with SessionLocal() as db:
+        return {d.mac_address.lower(): d.state for d in db.query(Device).all()}
+
+
+def test_public_mode_holds_back_new_devices_but_not_approved_ones(monkeypatch):
+    seed_world("PUBLIC")
+    calls = _reconcile_with_fake_nft(monkeypatch)
+    states = _device_states()
+    new = {m for m, st in states.items() if st == "NEW"}
+    approved = {m for m, st in states.items() if st == "APPROVED"}
+    assert new and approved
+    assert new <= set(calls["deny"])
+    assert not (approved & set(calls["deny"]))
+    assert calls["counted"] is None                         # Public mode does no usage counting
+
+
+def test_monitor_mode_never_holds_anything_back(monkeypatch):
+    seed_world("MONITOR")
+    calls = _reconcile_with_fake_nft(monkeypatch)
+    assert calls["deny"] == []
+
+
+def test_full_mode_still_only_holds_back_guests(monkeypatch):
+    seed_world("FULL")
+    calls = _reconcile_with_fake_nft(monkeypatch)
+    states = _device_states()
+    assert not ({m for m, st in states.items() if st == "NEW"} & set(calls["deny"]))
+
+
+def test_vouchers_are_offered_in_public_mode(monkeypatch):
+    monkeypatch.setattr("clarinet.core_svc.enforcement_status.problem", lambda: None)
+    seed_world("PUBLIC")
+    c = new_client(ADMIN)
+    assert 'href="/vouchers"' in c.get("/dashboard").text
+    assert "needs Full Control mode" not in c.get("/vouchers").text
+
+
+def test_login_page_points_visitors_to_the_guest_page():
+    seed_world("MONITOR")
+    from tests._support import new_client as anon
+    page = anon().get("/login").text
+    assert 'href="/guest"' in page
+
+
+def test_active_scan_needs_root_scapy_and_the_right_mode(monkeypatch):
+    import os
+    from clarinet.app_settings import set_setting
+    from clarinet.collector.arp_scanner import active_discovery_on
+    from clarinet.database import SessionLocal
+    seed_world("FULL")
+    with SessionLocal() as db:
+        monkeypatch.setattr(os, "geteuid", lambda: 1000)
+        assert not active_discovery_on(db)                  # not root
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+        assert active_discovery_on(db)                      # auto + Full Control
+        set_setting(db, "active_discovery", "off")
+        assert not active_discovery_on(db)
+        set_setting(db, "active_discovery", "auto")
+        set_setting(db, "network_mode", "MONITOR")
+        assert not active_discovery_on(db)                  # auto stays passive outside Full Control
+        set_setting(db, "active_discovery", "on")
+        assert active_discovery_on(db)
+
+
+# ── Phase 6: installer and secret key ──────────────────────────────────────────────────────────────────────
+
+def _cfg(key, env):
+    from clarinet.config import Settings
+    return Settings(SECRET_KEY=key, APP_ENV=env)
+
+
+def test_production_refuses_the_example_secret_key():
+    from clarinet.config import check_secret_key
+    for bad in ("change-me", "", "  Change-Me "):
+        with pytest.raises(RuntimeError):
+            check_secret_key(_cfg(bad, "production"))
+    assert check_secret_key(_cfg("a" * 64, "production")) is None
+
+
+def test_development_only_warns_about_the_example_secret_key():
+    from clarinet.config import check_secret_key
+    assert "SECRET_KEY" in check_secret_key(_cfg("change-me", "development"))
+    assert check_secret_key(_cfg("something-private", "development")) is None
+
+
+def test_installer_creates_a_private_env_file():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    script = (root / "deploy" / "install.sh").read_text()
+    assert "secrets.token_hex" in script and "chmod 600" in script and "APP_ENV=production" in script
+    assert script.index("Private configuration") < script.index("systemctl start clarinet")   # .env exists before the service starts

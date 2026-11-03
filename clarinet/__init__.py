@@ -10,6 +10,7 @@ Registers:
   - Startup event: create DB tables + seed default settings
 """
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -41,10 +42,11 @@ def _page_context(request):
     except Exception:
         pass
     problem = None
-    if mode == "FULL":
+    if mode in ("FULL", "PUBLIC"):
         from clarinet.core_svc.enforcement_status import problem as _problem
         problem = _problem()
-    return {"net_mode": mode, "enforcing": mode == "FULL", "enforce_problem": problem}
+    return {"net_mode": mode, "enforcing": mode == "FULL", "quarantine": mode in ("FULL", "PUBLIC"),
+            "enforce_problem": problem}
 
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
@@ -97,6 +99,10 @@ def _setup_complete(db) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    from clarinet.config import check_secret_key
+    warning = check_secret_key()                       # raises in production when the key is the example value
+    if warning:
+        logging.getLogger("clarinet").warning(warning)
     # Create all tables (idempotent on restart)
     Base.metadata.create_all(bind=engine)
 

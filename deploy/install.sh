@@ -49,6 +49,22 @@ sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q -r "$APP_DIR/requirement
 # Linux-only packages
 sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install -q scapy netifaces zeroconf
 
+# ── 4b. Private configuration (.env) ──────────────────────────────
+# The service refuses to start in production with the example SECRET_KEY, so make a random one.
+if [ ! -f "$APP_DIR/.env" ]; then
+  echo "▶ Creating $APP_DIR/.env with a random SECRET_KEY…"
+  KEY="$("$APP_DIR/.venv/bin/python" -c 'import secrets; print(secrets.token_hex(32))')"
+  sed -e "s|^SECRET_KEY=.*|SECRET_KEY=$KEY|" \
+      -e "s|^APP_ENV=.*|APP_ENV=production|" \
+      -e "s|^APP_HOST=.*|APP_HOST=127.0.0.1|" \
+      -e "s|^COOKIE_SECURE=.*|COOKIE_SECURE=true|" \
+      "$APP_DIR/.env.example" > "$APP_DIR/.env"
+  chown "$APP_USER":"$APP_USER" "$APP_DIR/.env"
+  chmod 600 "$APP_DIR/.env"
+else
+  echo "▶ Keeping the existing $APP_DIR/.env"
+fi
+
 # ── 5. Download offline static assets ────────────────────────────
 echo "▶ Downloading frontend assets…"
 bash "$APP_DIR/clarinet/static/download_assets.sh"

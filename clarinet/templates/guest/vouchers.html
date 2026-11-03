@@ -3,7 +3,7 @@
 {% block title %}Guest Vouchers{% endblock %}
 {% block page_title %}Guest Vouchers{% endblock %}
 {% block content %}
-{% if not enforcing %}
+{% if not quarantine %}
 {{ modes.needs_full('Guest vouchers', user, net_mode) }}
 {% else %}
 <div class="page-header">
@@ -105,7 +105,7 @@
 {% endblock %}
 
 {% block scripts %}
-{% if enforcing %}
+{% if quarantine %}
 <script>
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }

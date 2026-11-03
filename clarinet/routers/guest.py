@@ -66,7 +66,7 @@ def _log_attempt(ip: str, code: str, success: bool, db: Session) -> None:
 def _redeem_problem(mac: str | None, voucher: Voucher, db: Session) -> str | None:
     """Why this device cannot use a voucher right now, or None. A refused redeem does not use the voucher up."""
     if mac is None:
-        return "We could not identify your device on this network. Connect to the Wi-Fi and try again."
+        return "We could not identify your device yet. Make sure you are connected to this network's Wi-Fi (not mobile data or a VPN), wait about 15 seconds so the network can see you, and try again. Your voucher has not been used."
     from clarinet.models import Device
     from clarinet.models.guest import EnforcementStatus
     device = db.query(Device).filter(Device.mac_address == mac).first()

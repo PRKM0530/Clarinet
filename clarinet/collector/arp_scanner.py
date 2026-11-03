@@ -54,12 +54,8 @@ class ScapyArpSource(ArpSource):
             return []
 
         if subnet is None:
-            try:
-                import netifaces
-                addrs = netifaces.ifaddresses(interface)
-                ip = addrs[netifaces.AF_INET][0]["addr"]
-                subnet = ip.rsplit(".", 1)[0] + ".0/24"
-            except Exception:
+            subnet = _subnet_of(interface)
+            if subnet is None:
                 log.debug("Could not derive subnet from interface %s", interface)
                 return []
 
@@ -123,6 +119,43 @@ class FakeSource(ArpSource):
 # ─── Module-level injectable source ──────────────────────────────────────────
 
 _arp_source: ArpSource = NeighbourTableSource()
+_default_source = _arp_source          # tests replace the source; only the default one gets the active scan added
+
+
+def active_discovery_on(db) -> bool:
+    """Should the active ARP scan run as well? Needs root and scapy. Setting active_discovery:
+    "on", "off", or "auto" (default): on only in Full Control mode, where this machine is the router."""
+    import os
+    try:
+        if os.geteuid() != 0:
+            return False
+        import importlib.util
+        if importlib.util.find_spec("scapy") is None:
+            return False
+        from clarinet.app_settings import get_setting
+        choice = (get_setting(db, "active_discovery", "auto") or "auto").lower()
+        if choice == "on":
+            return True
+        if choice == "off":
+            return False
+        return (get_setting(db, "network_mode", "MONITOR") or "").upper() == "FULL"
+    except Exception:
+        return False
+
+
+def _subnet_of(interface: str) -> str | None:
+    """The IPv4 network of an interface, from `ip`."""
+    import subprocess
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show", "dev", interface],
+                             capture_output=True, text=True, timeout=5).stdout
+        for part in out.split():
+            if "/" in part and part[0].isdigit():
+                import ipaddress
+                return str(ipaddress.ip_interface(part).network)
+    except Exception:
+        pass
+    return None
 
 
 def set_source(source: ArpSource) -> None:
@@ -173,6 +206,11 @@ def scan_once(db, interface: str, subnet: str | None = None) -> list[dict]:
 
     guest_subnet = _get_guest_subnet(db)
     results = _arp_source.scan(interface, subnet)
+    if _arp_source is _default_source and active_discovery_on(db):
+        known = {(r.get("mac") or "").upper() for r in results}
+        for r in ScapyArpSource().scan(interface, subnet):
+            if (r.get("mac") or "").upper() not in known:
+                results.append(r)
 
     now = datetime.now(timezone.utc)
     new_devices: list[dict] = []
