@@ -1,8 +1,14 @@
 {% extends "base_app.html" %}
+{% import "_modes.html" as modes %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px" id="health">
+  <span class="muted" style="font-size:13px">Network health</span>
+  <span class="badge badge-{{ 'green' if health == 'Healthy' else ('red' if health == 'Critical slowdown' else 'yellow') }}" style="font-size:13px">{{ health }}</span>
+</div>
 
 <!-- Stat grid -->
 <div class="stat-grid">
@@ -43,6 +49,7 @@
     <div class="stat-label">Usage today</div>
     <div class="stat-value">{{ ((today_traffic_mb or 0) * 1048576)|size }}</div>
     <div class="stat-meta">{{ "All devices combined" if user.is_admin else "Your devices" }}</div>
+    {% if no_usage_data %}<div class="stat-meta" style="margin-top:6px">{{ modes.usage_note(user, net_mode, enforce_problem) }}</div>{% endif %}
   </div>
   {% if limit %}
   {% set pct = ((limit.pct_used or 0) * 100)|round(0)|int %}
@@ -68,6 +75,24 @@
   {% if user.is_admin %}<a href="/slowdowns" class="btn btn-danger btn-sm" style="margin-left:auto">View details</a>{% endif %}
 </div>
 {% endif %}
+
+<!-- Latency of the router and the two public targets -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header">
+    <span class="card-header-title">Latency, last 3 hours</span>
+    <span class="card-header-sub">Router, Cloudflare (1.1.1.1), Google (8.8.8.8)</span>
+  </div>
+  <div class="card-body">
+    {% if latency %}
+    <div style="height:220px"><canvas id="latency-chart" aria-label="Latency of the router and the public targets over the last three hours"></canvas></div>
+    {% if not has_router_ping and user.is_admin %}
+    <p class="muted" style="margin:8px 0 0">The router line is missing: enter the router address under <a href="/settings">Settings</a>.</p>
+    {% endif %}
+    {% else %}
+    <div class="empty-state"><h4>No latency measurements yet</h4><p>Clarinet pings the router, Cloudflare and Google every minute. The chart fills in after a few minutes.</p></div>
+    {% endif %}
+  </div>
+</div>
 
 <div class="two-col">
 
@@ -129,11 +154,11 @@
             </div>
             <div style="font-size:11.5px;color:var(--text-3)">{{ d.vendor or d.mac_address }}</div>
           </td>
-          <td style="text-align:right;padding-right:14px">
+          <td style="text-align:right;padding-right:14px;min-width:150px">
             <div style="font-size:12px;font-weight:600;color:var(--text)">{{ (d.total or 0)|size }}</div>
-            <span class="badge badge-{{ 'green' if d.state == 'APPROVED' else ('red' if d.state == 'BLOCKED' else ('yellow' if d.state == 'NEW' else 'blue')) }}">
-              {{ d.state }}
-            </span>
+            <div style="height:6px;border-radius:3px;background:var(--surface-2);margin-top:4px" aria-hidden="true">
+              <div style="height:6px;border-radius:3px;background:var(--accent);width:{{ ((d.total or 0) / top_max * 100)|round|int if top_max else 0 }}%"></div>
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -142,11 +167,64 @@
     {% else %}
     <div class="empty-state">
       
-      <h4>No devices yet</h4>
-      <p>Start the collector on Linux to discover devices.</p>
+      {% if user.is_admin %}<h4>No devices with traffic yet</h4>
+      <p>Usage appears here once Clarinet counts traffic.</p>
+      {% else %}<h4>No usage from your devices yet</h4>
+      <p>Add a device on the <a href="/devices">My devices</a> page first.</p>{% endif %}
     </div>
     {% endif %}
   </div>
 
 </div>
+
+<!-- Activity: joins, leaves and live alerts -->
+<div class="card" style="margin-top:20px">
+  <div class="card-header"><span class="card-header-title">Activity</span><span class="card-header-sub">Updates live</span></div>
+  <ul id="activity" class="timeline" style="padding:0 18px;list-style:none;margin:0">
+    {% for h, dev in activity %}
+    <li style="padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <span class="badge badge-{{ 'green' if h.event == 'JOIN' else 'gray' }}">{{ 'Joined' if h.event == 'JOIN' else 'Left' }}</span>
+      <strong>{{ dev.label or dev.hostname or dev.mac_address }}</strong>
+      <span class="muted">{{ h.ip_address or '' }}</span>
+      <span class="muted" style="float:right">{{ h.timestamp.strftime('%d %b %H:%M') }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if not activity %}<div class="empty-state" id="activity-empty"><p>Devices joining and leaving the network will show up here.</p></div>{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const series = {{ latency|tojson }};
+  const el = document.getElementById('latency-chart');
+  if (el && window.Chart) {
+    const names = { router: 'Router', cloudflare: 'Cloudflare 1.1.1.1', google_dns: 'Google 8.8.8.8' };
+    const colours = { router: '#2563eb', cloudflare: '#0d9488', google_dns: '#d97706' };
+    new Chart(el, {
+      type: 'scatter',
+      data: { datasets: Object.keys(series).map(k => ({
+        label: names[k] || k, data: series[k], showLine: true, pointRadius: 0, borderWidth: 2, tension: 0.25,
+        borderColor: colours[k] || '#64748b', backgroundColor: colours[k] || '#64748b' })) },
+      options: { responsive: true, maintainAspectRatio: false, animation: false,
+        scales: { x: { type: 'linear', title: { display: true, text: 'minutes ago' }, ticks: { callback: v => v === 0 ? 'now' : v } },
+                  y: { beginAtZero: true, title: { display: true, text: 'ms' } } },
+        plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+  // live alerts are added to the activity list as they arrive
+  document.addEventListener('clarinet:alert', function (e) {
+    const a = e.detail, list = document.getElementById('activity');
+    if (!list) return;
+    const empty = document.getElementById('activity-empty'); if (empty) empty.remove();
+    const li = document.createElement('li');
+    li.style.cssText = 'padding:9px 0;border-bottom:1px solid var(--border);font-size:13px';
+    const badge = document.createElement('span'); badge.className = 'badge badge-yellow'; badge.textContent = a.level || 'Alert';
+    const text = document.createElement('span'); text.textContent = ' ' + (a.title || (a.type || '').replace(/_/g, ' '));
+    const when = document.createElement('span'); when.className = 'muted'; when.style.float = 'right'; when.textContent = new Date().toTimeString().slice(0, 5);
+    li.append(badge, text, when); list.prepend(li);
+  });
+})();
+</script>
 {% endblock %}

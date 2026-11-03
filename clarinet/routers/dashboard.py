@@ -22,6 +22,12 @@ from datetime import date, datetime, timedelta, timezone
 router = APIRouter(tags=["dashboard"])
 
 
+def scope_devices_history(query, own_ids):
+    """Limit a history query to a member's own devices (None = administrator, no limit)."""
+    from clarinet.models import Device
+    return query if own_ids is None else query.filter(Device.device_id.in_(own_ids))
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
     result = require_login(request, db)
@@ -128,6 +134,32 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     if not user.is_admin:
         new_devices = None
 
+    # Network health badge (network-wide, fine for everyone)
+    health = "Healthy"
+    if active_slowdown is not None:
+        causes = active_slowdown.causes
+        health = "Critical slowdown" if causes and causes[0].get("cause") == "INTERNET_OUTAGE" else "Degraded"
+
+    # Latency of the router and the two public targets over the last three hours
+    now_utc = datetime.now(timezone.utc)
+    latency: dict[str, list] = {}
+    for r in (db.query(PingRecord).filter(PingRecord.measured_at >= now_utc - timedelta(hours=3), PingRecord.avg_ms.isnot(None))
+              .order_by(PingRecord.measured_at.asc()).all()):
+        at = r.measured_at if r.measured_at.tzinfo else r.measured_at.replace(tzinfo=timezone.utc)
+        latency.setdefault(r.target, []).append({"x": round(-(now_utc - at).total_seconds() / 60, 1), "y": r.avg_ms})
+    has_router_ping = "router" in latency
+
+    # Usage bars: share of the busiest device
+    top_max = max([(d.total or 0) for d in top_devices], default=0)
+
+    # Recent joins and leaves (a member only sees their own devices)
+    from clarinet.models import DeviceHistory
+    hist_q = (db.query(DeviceHistory, Device).join(Device, Device.device_id == DeviceHistory.device_id))
+    activity = scope_devices_history(hist_q, own_ids).order_by(DeviceHistory.timestamp.desc()).limit(12).all()
+
+    from clarinet.models import UsageRecord as _U
+    no_usage_data = (db.query(func.count(_U.record_id)).scalar() or 0) == 0
+
     return templates.TemplateResponse("dashboard/overview.html", {
         "request": request,
         "user": user,
@@ -146,6 +178,12 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "avg_latency": avg_latency,
         "active_slowdown": active_slowdown,
         "top_devices": top_devices,
+        "top_max": top_max,
+        "health": health,
+        "latency": latency,
+        "has_router_ping": has_router_ping,
+        "activity": activity,
+        "no_usage_data": no_usage_data,
         # flash messages
         "error": request.query_params.get("error", ""),
         "info": request.query_params.get("info", ""),

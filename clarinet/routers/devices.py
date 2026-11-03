@@ -117,11 +117,22 @@ def device_detail(device_id: int, request: Request, db: Session = Depends(get_db
     )
     aliases = db.query(MergedMac).filter(MergedMac.primary_device_id == device_id).all() if user.is_admin else []
 
+    from clarinet.core_svc.settings_m1 import billing_day
+    from clarinet.core_svc.usage_service import usage_for
+    import json as _json
+    from clarinet.models import TimeRule
+    week = usage_for(db, user, "week", device_id=device_id, billing_day=billing_day(db))
+    rules = db.query(TimeRule).filter(TimeRule.device_id == device_id).order_by(TimeRule.start_time).all()
+
     return templates.TemplateResponse("devices/detail.html", {
         "request": request,
         "user": user,
         "page": "devices",
         "device": device,
+        "week_days": sorted(week.by_day.items()),
+        "week_total": week.total_bytes,
+        "rules": [{"days": _json.loads(r.days_json or "[]"), "start": r.start_time, "end": r.end_time,
+                   "action": r.action, "rate": r.rate_kbps, "active": r.active} for r in rules],
         "history": history,
         "members": members,
         "others": others,

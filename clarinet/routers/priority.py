@@ -153,6 +153,9 @@ def priority_page(request: Request, db: Session = Depends(get_db)):
         "devices": my_devices,             # keep both for template compat
         "pending_grants": pending_grants,
         "my_grants": my_grants,
+        # the table on the page: an administrator sees everyone's requests, a member only their own
+        "grants": (db.query(PriorityGrant).order_by(PriorityGrant.requested_at.desc()).limit(50).all()
+                   if user.is_admin else my_grants),
         "mode": mode,
         "mode_available": mode == "FULL",
         "used_today_min": used_today,

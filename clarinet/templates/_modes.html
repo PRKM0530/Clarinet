@@ -13,3 +13,7 @@
   </div>
 </div>
 {% endmacro %}
+
+{% macro usage_note(user, net_mode, enforce_problem) %}
+{% if net_mode == 'FULL' and not enforce_problem %}Usage appears after the first minute of traffic.{% else %}Usage needs Clarinet to run on the router in Full Control mode, with permission to count traffic. On a laptop you still see devices, latency and speed.{% endif %}
+{% endmacro %}

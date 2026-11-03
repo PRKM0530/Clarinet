@@ -304,6 +304,14 @@ def attempt_login(
             _write_login_attempt(db, ip, username, False, user.member_id)
             _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password_lockout"})
             db.commit()
+            try:
+                from clarinet.core_svc.alerts import raise_alert
+                raise_alert(db, "WARNING", "LOCKOUT", f"{username} was locked out",
+                            f"Several wrong passwords for '{username}' from {ip}. The account is locked for "
+                            f"{_lockout_minutes()} minutes. If this was not them, someone may be guessing.",
+                            dedupe_key=username, cooldown_s=_lockout_minutes() * 60)
+            except Exception:
+                pass
             return None, generic_error
         else:
             _write_login_attempt(db, ip, username, False, user.member_id)

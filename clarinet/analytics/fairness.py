@@ -87,3 +87,24 @@ def suggest_rate_limits(db) -> list[dict]:
             "suggested_rate_kbps": cap_kbps,
         })
     return suggestions
+
+
+def jain_index(totals) -> float | None:
+    """
+    Jain's fairness index of how much each device used: 1.0 = everyone used the same, near 1/n = one device used
+    almost everything. None when there is nothing to compare (fewer than two devices with traffic).
+    """
+    values = [float(v) for v in totals if v and v > 0]
+    if len(values) < 2:
+        return None
+    return (sum(values) ** 2) / (len(values) * sum(v * v for v in values))
+
+
+def fairness_words(index: float | None) -> str:
+    if index is None:
+        return "Not enough devices with traffic to compare."
+    if index >= 0.85:
+        return "Bandwidth is shared fairly."
+    if index >= 0.6:
+        return "A few devices use noticeably more than the others."
+    return "One or two devices use most of the bandwidth."

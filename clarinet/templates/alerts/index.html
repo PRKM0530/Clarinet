@@ -6,6 +6,28 @@
   <h2>Alerts</h2>
   <p>{{ open_count }} open &mdash; {{ critical_count }} critical</p>
 </div>
+<form method="get" action="/alerts" class="card" style="margin-bottom:16px">
+  <div class="card-body" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+    <div><label class="form-label" for="f-status">Status</label>
+      <select id="f-status" name="status" class="form-select">
+        {% for value, label in [('OPEN', 'Open'), ('ACK', 'Acknowledged'), ('RESOLVED', 'Resolved'), ('ALL', 'All')] %}
+        <option value="{{ value }}"{{ ' selected' if (status_filter or 'OPEN')|upper == value else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select></div>
+    <div><label class="form-label" for="f-level">Level</label>
+      <select id="f-level" name="level" class="form-select">
+        <option value="">Any</option>
+        {% for value in ['CRITICAL', 'WARNING', 'INFO'] %}<option value="{{ value }}"{{ ' selected' if level_filter|upper == value else '' }}>{{ value.title() }}</option>{% endfor %}
+      </select></div>
+    <div><label class="form-label" for="f-type">Type</label>
+      <select id="f-type" name="type" class="form-select">
+        <option value="">Any</option>
+        {% for t in types %}<option value="{{ t }}"{{ ' selected' if type_filter == t else '' }}>{{ t.replace('_', ' ').title() }}</option>{% endfor %}
+      </select></div>
+    <button class="btn btn-secondary" type="submit">Filter</button>
+  </div>
+</form>
+
 <div class="card">
   <div class="table-wrap">
     <table class="cl-table">
@@ -64,4 +86,12 @@
     </table>
   </div>
 </div>
+{% if total_pages > 1 %}
+<div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-top:14px">
+  {% set q = 'status=' ~ (status_filter or 'OPEN') ~ '&level=' ~ level_filter ~ '&type=' ~ type_filter %}
+  {% if cur_page > 1 %}<a class="btn btn-ghost btn-sm" href="/alerts?{{ q }}&page={{ cur_page - 1 }}">← Newer</a>{% endif %}
+  <span class="muted">Page {{ cur_page }} of {{ total_pages }}</span>
+  {% if cur_page < total_pages %}<a class="btn btn-ghost btn-sm" href="/alerts?{{ q }}&page={{ cur_page + 1 }}">Older →</a>{% endif %}
+</div>
+{% endif %}
 {% endblock %}

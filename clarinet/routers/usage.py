@@ -36,12 +36,24 @@ def usage_page(request: Request, db: Session = Depends(get_db)):
     bday = billing_day(db)
     usage = usage_for(db, user, period, billing_day=bday)
 
+    # How evenly the whole network's bandwidth is shared: one number, no device names, so members may see it
+    from sqlalchemy import func
+    from clarinet.analytics.fairness import fairness_words, jain_index
+    from clarinet.models import UsageRecord
+    totals = [t for (t,) in db.query(func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out))
+              .filter(UsageRecord.date >= usage.period_start, UsageRecord.date <= usage.period_end)
+              .group_by(UsageRecord.device_id).all()]
+    index = jain_index(totals)
+    no_usage_data = (db.query(func.count(UsageRecord.record_id)).scalar() or 0) == 0
+
     return templates.TemplateResponse("usage/index.html", {
         "request": request,
         "user": user,
         "page": "usage",
         "period": period,
         "usage": usage,
+        "fairness": {"index": None if index is None else round(index, 2), "words": fairness_words(index)},
+        "no_usage_data": no_usage_data,
         "device": None,
         "device_rows": _device_rows(db, usage),
         "activity_rows": _activity_rows(usage),

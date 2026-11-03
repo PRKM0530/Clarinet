@@ -41,10 +41,14 @@ def alerts_page(request: Request, db: Session = Depends(get_db)):
     from clarinet.core_svc.permissions import visible_alerts
     from clarinet.models import Alert
     q = visible_alerts(db, user)
+    type_filter = request.query_params.get("type", "").strip().upper()
+    types = [t for (t,) in visible_alerts(db, user).with_entities(Alert.type).distinct().order_by(Alert.type)]
     if level_filter:
         q = q.filter(Alert.level == level_filter.upper())
-    if status_filter:
+    if status_filter and status_filter.upper() != "ALL":
         q = q.filter(Alert.status == status_filter.upper())
+    if type_filter:
+        q = q.filter(Alert.type == type_filter)
 
     total = q.count()
     alerts = (
@@ -65,6 +69,8 @@ def alerts_page(request: Request, db: Session = Depends(get_db)):
         "total_pages": max(1, (total + per_page - 1) // per_page),
         "level_filter": level_filter,
         "status_filter": status_filter,
+        "type_filter": type_filter,
+        "types": types,
         "info": request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })

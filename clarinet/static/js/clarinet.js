@@ -52,6 +52,7 @@ function setWsState(state) {
 // ── Alert handler ─────────────────────────────────────────────────────────────
 
 function onAlert(data) {
+  document.dispatchEvent(new CustomEvent('clarinet:alert', { detail: data }));
   showToast(data);
   bumpAlertBadge();
   browserNotify(data);

@@ -100,6 +100,8 @@ def scan_cycle() -> None:
                 log.debug("scan_cycle: no network_interface configured — skipping")
                 return
             scan_once(db, iface)
+            from clarinet.core_svc.presence import record_presence_changes
+            record_presence_changes(db)
         from clarinet.core_svc.heartbeat import beat
         beat("arp_scanner", 15)
     except Exception as exc:

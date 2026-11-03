@@ -73,6 +73,12 @@
               </span>
             </td>
             <td style="text-align:right;padding-right:14px">
+              {% if g.decision in ('APPROVED', 'PENDING') and (user.is_admin or g.member_id == user.member_id) %}
+              <form method="post" action="/priority/{{ g.grant_id }}/cancel" style="display:inline"
+                    onsubmit="return confirm('Cancel this priority request?')">
+                <button class="btn btn-ghost btn-sm btn-icon" title="Cancel">Cancel</button>
+              </form>
+              {% endif %}
               {% if user.is_admin and g.decision == 'PENDING' %}
               <div style="display:flex;gap:4px">
                 <form method="post" action="/priority/{{ g.grant_id }}/approve">

@@ -187,5 +187,5 @@ def test_b5_member_pages_do_not_show_admin_only_buttons(world):
     detail = alice.get(f"/devices/{world['d_alice']}").text
     for word in ("Block Device", "Approve Device", "Add Time Rule", "Merge into this device", "Mark as guest"):
         assert word not in detail, word
-    assert "Resolve" not in alice.get("/alerts?status=OPEN").text
+    assert "/resolve" not in alice.get("/alerts?status=OPEN").text           # no Resolve button for members
     assert "approve-modal" not in alice.get("/devices").text

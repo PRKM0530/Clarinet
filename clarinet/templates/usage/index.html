@@ -1,4 +1,5 @@
 {% extends "base_app.html" %}
+{% import "_modes.html" as modes %}
 {% block title %}Usage{% endblock %}
 {% block page_title %}Data usage{% endblock %}
 {% block content %}
@@ -26,7 +27,15 @@
   <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">{{ usage.total_bytes|size }}</div></div>
   <div class="stat-card"><div class="stat-label">Download</div><div class="stat-value">{{ usage.bytes_in|size }}</div></div>
   <div class="stat-card"><div class="stat-label">Upload</div><div class="stat-value">{{ usage.bytes_out|size }}</div></div>
+  {% if fairness is defined and not device %}
+  <div class="stat-card"><div class="stat-label">Fairness</div>
+    <div class="stat-value">{{ fairness.index if fairness.index is not none else '–' }}</div>
+    <div class="stat-meta">{{ fairness.words }}</div></div>
+  {% endif %}
 </div>
+{% if no_usage_data is defined and no_usage_data %}
+<div class="card" style="margin-bottom:16px"><div class="card-body muted">{{ modes.usage_note(user, net_mode, enforce_problem) }}</div></div>
+{% endif %}
 
 <div class="two-col section">
   <div class="card">

@@ -121,6 +121,22 @@ def get_limit_summary(db: Session) -> LimitSummary:
     )
 
 
+def _flag_heavy_devices(db: Session, summary) -> None:
+    """HIGH_USAGE: a single device has used more than half of the whole monthly limit."""
+    from sqlalchemy import func
+    from clarinet.core_svc.alerts import raise_alert
+    from clarinet.models import Device, UsageRecord
+    rows = (db.query(UsageRecord.device_id, func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out))
+            .filter(UsageRecord.date >= summary.period_start).group_by(UsageRecord.device_id).all())
+    for device_id, total in rows:
+        if total and total > summary.bytes_limit * 0.5:
+            device = db.get(Device, device_id)
+            name = (device.label or device.hostname or device.mac_address) if device else f"Device {device_id}"
+            raise_alert(db, "WARNING", "HIGH_USAGE", f"{name} has used over half of the monthly data",
+                        f"{name} used {round(100 * total / summary.bytes_limit)}% of the {round(summary.bytes_limit / 1_073_741_824, 1)} GB "
+                        "monthly limit this period.", device_id=device_id, cooldown_s=86400)
+
+
 def _apply_throttle(db: Session, over_limit: bool) -> None:
     """At 100 percent, slow every approved device down; once back under the limit, release them."""
     try:
@@ -148,6 +164,7 @@ def check_and_alert(db: Session) -> None:
 
     pct = summary.pct_used or 0.0
     _apply_throttle(db, pct >= 1.0)
+    _flag_heavy_devices(db, summary)
     used_gb = summary.gb_used
     limit_gb = round(summary.bytes_limit / 1_073_741_824, 1)
 

@@ -132,6 +132,35 @@
 </div>
 {% endif %}
 
+  <div class="card" style="margin-top:20px">
+    <div class="card-header"><span class="card-header-title">Usage, last 7 days</span><span class="card-header-sub">{{ week_total|size }}</span></div>
+    <div class="card-body">
+      {% if week_days %}
+      <div style="height:180px"><canvas id="week-chart" aria-label="Data used by this device each day for the last seven days"></canvas></div>
+      {% else %}
+      <p class="muted">No usage recorded for this device yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+
+<!-- Time rules on this device (read-only) -->
+{% if rules %}
+<div class="card" style="margin-top:20px">
+  <div class="card-header"><span class="card-header-title">Time rules on this device</span>{% if user.is_admin and enforcing %}<a class="card-header-sub" href="/rules?device={{ device.device_id }}">Manage →</a>{% endif %}</div>
+  <div class="table-wrap"><table class="cl-table"><tbody>
+    {% for r in rules %}
+    <tr style="{{ 'opacity:.5' if not r.active else '' }}">
+      <td>{{ r.days|join(', ') }}</td>
+      <td><code>{{ r.start }} – {{ r.end }}</code></td>
+      <td>{{ 'Blocked' if r.action == 'BLOCK' else ('Limited to ' ~ r.rate ~ ' kbps') }}</td>
+      <td>{{ 'Active' if r.active else 'Paused' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+</div>
+{% endif %}
+
 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
   {% if user.is_admin and enforcing and device.state != 'GUEST' %}
   <form method="post" action="/devices/{{ device.device_id }}/guest"
@@ -163,4 +192,18 @@
   {% endif %}
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const days = {{ week_days|tojson }};
+  const el = document.getElementById('week-chart');
+  if (!el || !window.Chart || !days.length) return;
+  new Chart(el, { type: 'bar',
+    data: { labels: days.map(d => d[0].slice(5)), datasets: [{ label: 'MB', data: days.map(d => Math.round(d[1] / 1048576 * 10) / 10), backgroundColor: '#2563eb' }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } },
+               scales: { y: { beginAtZero: true, title: { display: true, text: 'MB' } } } } });
+})();
+</script>
 {% endblock %}
