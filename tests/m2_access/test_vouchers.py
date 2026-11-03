@@ -73,8 +73,16 @@ class TestVoucherCreation:
 
 class TestVoucherRedemption:
     def test_valid_code_returns_success_page(self, client, admin_client):
+        # The guest must be a device the scanner has seen: a voucher is not used up for an unknown device.
+        from clarinet.database import SessionLocal
+        from clarinet.models import Device
+        with SessionLocal() as db:
+            if not db.query(Device).filter(Device.ip_address == "10.99.0.5").first():
+                db.add(Device(mac_address="AA:BB:CC:00:00:05", ip_address="10.99.0.5", state="NEW"))
+                db.commit()
         v = _create_voucher(admin_client, expires_minutes=60)
-        resp = client.post("/guest/redeem", data={"code": v.code}, follow_redirects=True)
+        resp = client.post("/guest/redeem", data={"code": v.code}, follow_redirects=True,
+                           headers={"X-Forwarded-For": "10.99.0.5"})
         assert resp.status_code == 200
         assert "success" in resp.text.lower() or v.code in resp.text
 

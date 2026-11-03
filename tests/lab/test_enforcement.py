@@ -31,7 +31,6 @@ def test_dev04_enforcer_layer_blocks_and_unblocks_real_traffic(world):
     assert can_reach("a", INTERNET_IP), "device did not recover after unblock"
 
 
-@pytest.mark.xfail(strict=True, reason="S-02: the admin's Block button never reaches nftables")
 def test_s02_block_button_stops_real_traffic(world):
     r = new_client(ADMIN).post(f"/devices/{world['d_alice']}/block")
     assert "info=blocked" in r.headers["location"]
@@ -50,7 +49,6 @@ def test_s02_reconcile_applies_blocked_devices_from_the_database(world):
     assert not can_reach("a", INTERNET_IP)
 
 
-@pytest.mark.xfail(strict=True, reason="S-02: reconcile_now never removes a block when the device is approved again")
 def test_s02_reconcile_removes_a_block_after_unblock(world):
     from clarinet.database import SessionLocal
     from clarinet.enforcer.nft_wrapper import block_device
@@ -67,10 +65,10 @@ def test_s02_reconcile_removes_a_block_after_unblock(world):
 # USG-01: counting
 def _wire_accounting(world):
     from clarinet.collector.traffic_counter import NftAccountingSource, set_source
-    from clarinet.enforcer.accounting import ensure_accounting_rules
+    from clarinet.enforcer.accounting import sync_accounting
     from clarinet.enforcer.nft_wrapper import ensure_table_exists
     ensure_table_exists()
-    assert ensure_accounting_rules([world["mac_a"], world["mac_b"]], IFACE)
+    assert sync_accounting([(world["mac_a"], A_IP), (world["mac_b"], B_IP)])     # counts uploads by MAC, downloads by IP
     set_source(NftAccountingSource())
 
 
@@ -99,13 +97,12 @@ def test_usg01_with_explicit_wiring_real_upload_is_counted_as_bytes_out(world):
         poll_and_record()
         up_in, up_out = _usage_bytes(world["d_alice"])
         assert up_out - base_out > 1_000_000, "upload traffic was not counted as bytes_out"
-        assert up_in == base_in, "upload was counted as download"
+        assert up_in - base_in < (up_out - base_out) / 20, "upload was counted as download (ACKs only should come back)"
         assert _usage_bytes(world["d_bob"]) == bob_before, "an idle device got usage"
     finally:
         _unwire()
 
 
-@pytest.mark.xfail(strict=True, reason="N-10: 'ether daddr' never matches at the forward hook, so downloads are never counted")
 def test_n10_real_download_is_counted_as_bytes_in(world):
     from clarinet.collector.traffic_counter import poll_and_record
     _wire_accounting(world)
@@ -120,23 +117,28 @@ def test_n10_real_download_is_counted_as_bytes_in(world):
         _unwire()
 
 
-@pytest.mark.xfail(strict=True, reason="S-01: nothing in the app installs the accounting rules or traffic source")
 def test_s01_app_default_wiring_records_usage_for_real_traffic(world):
     """No test wiring: only the app's own startup/job functions are used."""
     from clarinet.collector.traffic_counter import poll_and_record
+    from clarinet.enforcer.reconcile import reconcile_now
     from clarinet.jobs import core
-    for name in ("setup", "startup", "init"):                  # whatever the app calls at start-up, if anything
-        if hasattr(core, name):
-            getattr(core, name)()
-    poll_and_record()
-    before = sum(_usage_bytes(world["d_alice"]))
-    iperf_mbps("a", seconds=2)
-    poll_and_record()
-    assert sum(_usage_bytes(world["d_alice"])) - before > 1_000_000
+
+    class Scheduler:                                           # registering the jobs is what the app does at start-up
+        def add_job(self, *a, **k):
+            pass
+    core.register(Scheduler())
+    reconcile_now()                                            # the reconcile job installs the counting rules
+    try:
+        poll_and_record()
+        before = sum(_usage_bytes(world["d_alice"]))
+        iperf_mbps("a", seconds=2)
+        poll_and_record()
+        assert sum(_usage_bytes(world["d_alice"])) - before > 1_000_000
+    finally:
+        _unwire()
 
 
 # Shaping
-@pytest.mark.xfail(strict=True, reason="N-11: the per-device tc rate limit does not slow the device in either direction")
 def test_tc_rate_limit_really_slows_one_device(world):
     from clarinet.enforcer.tc_wrapper import set_rate_limit, setup_htb
     free_up, free_down = iperf_mbps("a"), iperf_mbps("a", reverse=True)
@@ -149,7 +151,6 @@ def test_tc_rate_limit_really_slows_one_device(world):
     assert down < 3 and up < 3, f"1 Mbit limit not applied: up {up:.1f} down {down:.1f} Mbit/s"
 
 
-@pytest.mark.xfail(strict=True, reason="N-12: remove_priority is a no-op, the priority filter stays")
 def test_tc_priority_filter_is_removed_when_priority_ends(world):
     from clarinet.enforcer.tc_wrapper import remove_priority, set_priority, setup_htb
     setup_htb(IFACE, 100)
@@ -161,7 +162,6 @@ def test_tc_priority_filter_is_removed_when_priority_ends(world):
 
 
 # Guest access
-@pytest.mark.xfail(strict=True, reason="S-06: a guest with no voucher still has full internet access")
 def test_s06_guest_without_voucher_is_stopped(world):
     from clarinet.enforcer.reconcile import reconcile_now
     reconcile_now()
@@ -174,10 +174,9 @@ def test_gst02_guest_with_open_access_reaches_the_internet(world):
     assert can_reach("guest", INTERNET_IP)
 
 
-@pytest.mark.xfail(strict=True, reason="S-06: an open guest can still reach other devices on the LAN")
 def test_s06_voucher_guest_cannot_reach_the_lan(world):
     from clarinet.enforcer.nft_wrapper import open_guest_access
-    open_guest_access(world["mac_guest"])
+    open_guest_access(world["mac_guest"], interface=IFACE)
     assert not can_reach("guest", A_IP)
 
 
@@ -223,7 +222,6 @@ def test_gst06_block_rule_is_lifted_when_the_rule_is_deactivated(world):
     assert can_reach("a", INTERNET_IP)
 
 
-@pytest.mark.xfail(strict=True, reason="S-08: the block rule is added again on every one-minute cycle")
 def test_s08_repeated_cycles_do_not_pile_up_rules(world):
     from clarinet.enforcer.nft_wrapper import apply_time_rules, ensure_table_exists
     ensure_table_exists()

@@ -166,7 +166,6 @@ def test_startup_warnings_in_the_log(app):
 
 
 # Live alerts from a real scheduler job
-@pytest.mark.xfail(strict=True, reason="S-03: alerts raised by scheduler threads never reach the websocket")
 def test_s03_new_device_alert_reaches_a_connected_websocket(app):
     from websockets.sync.client import connect
     cookie = "; ".join(f"{k}={v}" for k, v in app.client.cookies.items())
@@ -174,28 +173,30 @@ def test_s03_new_device_alert_reaches_a_connected_websocket(app):
         ns("attacker", "ping", "-c", "1", "-W", "1", ROUTER_IP)          # a brand-new device appears
         ws.send("ping")
         messages = []
-        try:
-            for _ in range(8):
-                messages.append(ws.recv(timeout=5))
-        except TimeoutError:
-            pass
+        deadline = time.time() + 45                                      # the scan runs every 15 s
+        while time.time() < deadline and not any("NEW_DEVICE" in m for m in messages):
+            try:
+                messages.append(ws.recv(timeout=3))
+            except TimeoutError:
+                pass
         assert any("NEW_DEVICE" in m for m in messages), f"only got {messages}"
 
 
 # Heartbeat and traffic accounting with the app's own wiring
-@pytest.mark.xfail(strict=True, reason="S-18: nothing writes CollectorHeartbeat rows, so the watchdog can never fire")
 def test_s18_collectors_write_heartbeats(app):
     assert app.query("select count(*) from collector_heartbeat")[0][0] > 0
 
 
-@pytest.mark.xfail(strict=True, reason="S-01: the running app never installs accounting, so real traffic adds no usage")
 def test_s01_real_traffic_creates_usage_rows_in_the_running_app(app):
     from tests.lab.conftest import mac_of
     a_id = device_rows(app)[mac_of("a")][0]
     assert app.client.post(f"/devices/{a_id}/approve", data={"label": "lab-a"}).status_code == 302
     iperf_mbps("a", seconds=3)
-    rows = app.wait_for(lambda: app.query("select sum(bytes_in + bytes_out) from usage_record where device_id = ?", a_id)[0][0], 100)
-    assert rows and rows > 1_000_000
+    rows = app.wait_for(lambda: app.query("select sum(bytes_in + bytes_out) from usage_record where device_id = ?", a_id)[0][0], 130)
+    assert rows and rows > 1_000_000, (
+        f"no usage for device {a_id} after 130 s.\nrules:\n{sh('nft', 'list', 'chain', 'inet', 'clarinet', 'accounting').stdout[:1200]}\n"
+        f"usage rows: {app.query('select * from usage_record')}\n"
+        f"log: {[l for l in app.log_text().splitlines() if 'traffic' in l.lower() or 'reconcile' in l.lower()][-8:]}")
 
 
 # Real guest voucher over the real network
@@ -249,7 +250,6 @@ def test_expired_voucher_loses_access_and_the_rules_go_eventually(app):
     assert f"guest_{mac_of('guest')}" not in nft_ruleset(), "the guest's access rules stayed after expiry"
 
 
-@pytest.mark.xfail(strict=True, reason="N-15: expire_vouchers runs every 5 minutes, so a guest keeps access up to 5 minutes after expiry")
 def test_n15_guest_access_ends_within_a_minute_of_expiry(app):
     assert EXPIRY_DELAY.get("seconds") is not None, "run after the expiry test"
     assert EXPIRY_DELAY["seconds"] <= 90, f"access lasted {EXPIRY_DELAY['seconds']} s past the expiry time"

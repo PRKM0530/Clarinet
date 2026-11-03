@@ -84,6 +84,11 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         _seed_defaults(db)
 
+    # Background jobs raise alerts from threads; the websocket module needs the server's event loop to push them
+    import asyncio
+    from clarinet.routers.ws import set_event_loop
+    set_event_loop(asyncio.get_running_loop())
+
     # Start the APScheduler background jobs
     from clarinet.scheduler import start_scheduler
     start_scheduler()

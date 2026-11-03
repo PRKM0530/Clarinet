@@ -70,7 +70,6 @@ def _record_nft(monkeypatch):
     return calls
 
 
-@pytest.mark.xfail(strict=True, reason="S-02: block imports clarinet.enforcer.enforcer, which does not exist")
 def test_s02_block_reaches_nftables(world, monkeypatch):
     calls = _record_nft(monkeypatch)
     r = new_client(ADMIN).post(f"/devices/{world['d_free']}/block")
@@ -80,7 +79,6 @@ def test_s02_block_reaches_nftables(world, monkeypatch):
 
 
 # S-03: an alert raised from a worker thread must reach a connected websocket
-@pytest.mark.xfail(strict=True, reason="S-03: set_event_loop is never called, so thread alerts are dropped")
 def test_s03_alert_from_worker_thread_reaches_websocket(world, monkeypatch):
     from fastapi.testclient import TestClient
     from clarinet import app
@@ -94,9 +92,9 @@ def test_s03_alert_from_worker_thread_reaches_websocket(world, monkeypatch):
         with client.websocket_connect("/ws/alerts") as ws:
             def job():
                 with SessionLocal() as db:
-                    raise_alert(db, "WARNING", "SLOWDOWN", "LIVE-TEST", "from a scheduler thread")
+                    raise_alert(db, "WARNING", "LIVE_TEST", "LIVE-TEST", "from a scheduler thread")
             threading.Thread(target=job).start()
             time.sleep(0.6)
             ws.send_text("ping")
-            seen = [ws.receive_text(), ws.receive_text()] if False else [ws.receive_text()]
+            seen = [ws.receive_text()]
             assert any("LIVE-TEST" in m for m in seen), f"live alert never arrived; got {seen}"

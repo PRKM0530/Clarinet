@@ -143,6 +143,9 @@ def measure_and_store() -> dict[str, PingResult]:
             ))
         db.commit()
 
+    from clarinet.core_svc.heartbeat import beat
+    beat("pinger", 60)
+
     try:
         from clarinet.analytics.diagnosis import check_slowdown
         check_slowdown(results)

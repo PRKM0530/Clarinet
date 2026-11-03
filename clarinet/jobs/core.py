@@ -24,6 +24,10 @@ log = logging.getLogger("clarinet.jobs.core")
 def register(scheduler) -> None:
     """Register all M1 jobs with the APScheduler instance."""
 
+    # Usage comes from the nftables accounting counters (the rules are installed by the reconcile job)
+    from clarinet.collector.traffic_counter import NftAccountingSource, set_source
+    set_source(NftAccountingSource())
+
     scheduler.add_job(
         scan_cycle,
         trigger=IntervalTrigger(seconds=15),
@@ -96,6 +100,8 @@ def scan_cycle() -> None:
                 log.debug("scan_cycle: no network_interface configured — skipping")
                 return
             scan_once(db, iface)
+        from clarinet.core_svc.heartbeat import beat
+        beat("arp_scanner", 15)
     except Exception as exc:
         log.debug("scan_cycle failed (Linux only?): %s", exc)
 
@@ -107,6 +113,8 @@ def traffic_cycle() -> None:
         deltas = poll_and_record()
         if deltas:
             log.debug("traffic_cycle: %d devices updated", len(deltas))
+        from clarinet.core_svc.heartbeat import beat
+        beat("traffic_counter", 60)
     except Exception as exc:
         log.debug("traffic_cycle failed: %s", exc)
 

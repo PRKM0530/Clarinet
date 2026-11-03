@@ -112,7 +112,6 @@ def test_s24_revoke_audit_records_the_previous_status(world):
         assert "UNUSED" in str(row.detail) and "REVOKED" not in str(row.detail), row.detail
 
 
-@pytest.mark.xfail(strict=True, reason="S-07: redeeming on an approved device turns it into a guest")
 def test_s07_redeeming_does_not_demote_an_approved_device(world):
     from clarinet.database import SessionLocal
     from clarinet.models import Device
@@ -123,7 +122,6 @@ def test_s07_redeeming_does_not_demote_an_approved_device(world):
         assert db.get(Device, world["d_alice"]).state == "APPROVED"
 
 
-@pytest.mark.xfail(strict=True, reason="S-07: a voucher redeemed from an unknown IP is used up with no device behind it")
 def test_s07_voucher_is_not_consumed_when_no_device_can_be_found(world):
     from clarinet.database import SessionLocal
     from clarinet.models import Voucher

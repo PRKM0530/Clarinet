@@ -28,6 +28,7 @@ router = APIRouter(tags=["websocket"])
 
 # All currently connected dashboard clients mapped to their role
 _clients: dict["WebSocket", str] = {}  # websocket → role ("ADMIN" | "MEMBER")
+_client_members: dict["WebSocket", int] = {}  # websocket → member id (so a member only gets their own alerts)
 
 # The running asyncio event loop, set by the app startup (C-02)
 _loop: "asyncio.AbstractEventLoop | None" = None
@@ -65,6 +66,7 @@ async def alerts_ws(websocket: WebSocket) -> None:
 
     await websocket.accept()
     _clients[websocket] = role
+    _client_members[websocket] = user.member_id
     log.debug("WS connected: user=%s role=%s", user.username, role)
 
     try:
@@ -78,6 +80,21 @@ async def alerts_ws(websocket: WebSocket) -> None:
         log.debug("WS error: %s", exc)
     finally:
         _clients.pop(websocket, None)
+        _client_members.pop(websocket, None)
+
+
+def _device_owner(device_id) -> int | None:
+    """Member id that owns the device an alert is about, or None (network-wide alert or unowned device)."""
+    if device_id is None:
+        return None
+    try:
+        from clarinet.database import SessionLocal
+        from clarinet.models import Device
+        with SessionLocal() as db:
+            device = db.get(Device, device_id)
+            return device.owner_member_id if device else None
+    except Exception:
+        return None
 
 
 async def broadcast_alert(alert_data: dict[str, Any]) -> None:
@@ -86,11 +103,15 @@ async def broadcast_alert(alert_data: dict[str, Any]) -> None:
     Admins receive full alert_data; Members receive only {type, level}.
     """
     dead: list["WebSocket"] = []
+    owner_of_device = _device_owner(alert_data.get("device_id"))
     for ws, role in list(_clients.items()):
         try:
             if role == "ADMIN":
                 payload = json.dumps(alert_data)
             else:
+                # Same rule as the alert pages: a member only hears about alerts on their own devices.
+                if owner_of_device is None or _client_members.get(ws) != owner_of_device:
+                    continue
                 # Members see only enough to show a badge — not the full message
                 payload = json.dumps({
                     "type": alert_data.get("type", "ALERT"),

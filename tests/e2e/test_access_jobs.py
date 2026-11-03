@@ -133,7 +133,6 @@ class FakeSocket:
         self.sent.append(text)
 
 
-@pytest.mark.xfail(strict=True, reason="S-25: every connected member is sent the type and level of every alert, including security ones")
 def test_s25_security_alert_is_not_pushed_to_members():
     from clarinet.routers import ws
     member, admin = FakeSocket(), FakeSocket()
@@ -147,14 +146,18 @@ def test_s25_security_alert_is_not_pushed_to_members():
     assert member.sent == []
 
 
-def test_s25_member_payload_is_only_type_and_level():
+def test_s25_member_gets_only_type_and_level_and_only_for_their_own_device(world):
     import json
     from clarinet.routers import ws
-    member = FakeSocket()
+    alice, bob = FakeSocket(), FakeSocket()
     ws._clients.clear()
-    ws._clients[member] = "MEMBER"
+    ws._clients[alice], ws._clients[bob] = "MEMBER", "MEMBER"
+    ws._client_members[alice], ws._client_members[bob] = world["alice"], world["bob"]
     try:
-        asyncio.run(ws.broadcast_alert({"type": "SLOWDOWN", "level": "WARNING", "title": "secret", "message": "secret"}))
+        asyncio.run(ws.broadcast_alert({"type": "SLOWDOWN", "level": "WARNING", "title": "secret", "message": "secret",
+                                        "device_id": world["d_alice"]}))
     finally:
         ws._clients.clear()
-    assert json.loads(member.sent[0]) == {"type": "SLOWDOWN", "level": "WARNING"}
+        ws._client_members.clear()
+    assert [json.loads(m) for m in alice.sent] == [{"type": "SLOWDOWN", "level": "WARNING"}]
+    assert bob.sent == [], "another member was sent an alert about a device they do not own"

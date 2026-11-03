@@ -150,6 +150,11 @@ def _write_deltas(deltas: dict[str, tuple[int, int]]) -> None:
             for mac, (bytes_in, bytes_out) in deltas.items():
                 device = db.query(Device).filter(Device.mac_address == mac.upper()).first()
                 if device is None:
+                    # A merged address: its traffic belongs to the device it was merged into.
+                    from clarinet.models.merging import MergedMac
+                    alias = db.get(MergedMac, mac.upper())
+                    device = db.get(Device, alias.primary_device_id) if alias else None
+                if device is None:
                     continue
 
                 rec = (

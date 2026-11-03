@@ -298,6 +298,15 @@ def split_device(
     return RedirectResponse(url=f"/devices/{new_id}?info=split", status_code=302)
 
 
+def _apply_enforcement(db) -> None:
+    """Make the network match the new device state right away (not up to 15 s later). Never breaks the page."""
+    try:
+        from clarinet.enforcer.reconcile import apply_now
+        apply_now(db)
+    except Exception:
+        pass
+
+
 @router.post("/devices/{device_id}/guest")
 def mark_device_guest(device_id: int, request: Request, db: Session = Depends(get_db)):
     """Treat this device as a guest: internet only, no access to the rest of the network."""
@@ -320,11 +329,7 @@ def mark_device_guest(device_id: int, request: Request, db: Session = Depends(ge
         old_value=old_state, new_value="GUEST", actor_id=user.member_id,
     ))
     audit(db, user.member_id, "MARK_GUEST_DEVICE", "Device", device_id)
-    try:
-        from clarinet.enforcer.enforcer import request_reconcile
-        request_reconcile()
-    except Exception:
-        pass
+    _apply_enforcement(db)
     return RedirectResponse(url=f"/devices/{device_id}?info=marked_guest", status_code=302)
 
 
@@ -358,11 +363,7 @@ def block_device(device_id: int, request: Request, db: Session = Depends(get_db)
     audit(db, user.member_id, "BLOCK_DEVICE", "Device", device_id)
 
     # Notify M2 (C-08: lazy import)
-    try:
-        from clarinet.enforcer.enforcer import request_reconcile
-        request_reconcile()
-    except Exception:
-        pass
+    _apply_enforcement(db)
 
     return RedirectResponse(url=f"/devices/{device_id}?info=blocked", status_code=302)
 
@@ -389,11 +390,7 @@ def unblock_device(device_id: int, request: Request, db: Session = Depends(get_d
     ))
     audit(db, user.member_id, "UNBLOCK_DEVICE", "Device", device_id)
 
-    try:
-        from clarinet.enforcer.enforcer import request_reconcile
-        request_reconcile()
-    except Exception:
-        pass
+    _apply_enforcement(db)
 
     return RedirectResponse(url=f"/devices/{device_id}?info=unblocked", status_code=302)
 
@@ -408,6 +405,7 @@ def delete_device(device_id: int, request: Request, db: Session = Depends(get_db
     from clarinet.core_svc.purge import purge_device
     audit(db, user.member_id, "DELETE_DEVICE", "Device", device_id)
     purge_device(db, device_id)
+    _apply_enforcement(db)
     return RedirectResponse(url="/devices?info=deleted", status_code=302)
 
 

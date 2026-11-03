@@ -31,10 +31,10 @@ def register(scheduler) -> None:
         next_run_time=datetime.now(timezone.utc),
     )
 
-    # Expire vouchers every 5 minutes (was every hour, too coarse for 30-min vouchers)
+    # Expire vouchers every minute so a guest's access ends close to the time on the voucher
     scheduler.add_job(
         expire_vouchers,
-        trigger=IntervalTrigger(minutes=5),
+        trigger=IntervalTrigger(seconds=60),
         id="expire_vouchers",
         replace_existing=True,
         coalesce=True,
@@ -58,6 +58,17 @@ def register(scheduler) -> None:
         expire_priority_grants,
         trigger=IntervalTrigger(seconds=60),
         id="expire_priority",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
+    # Full reconcile every minute: re-applies blocks, guests and counters after IP changes or a reboot
+    scheduler.add_job(
+        reconcile_full,
+        trigger=IntervalTrigger(seconds=60),
+        id="reconcile_full",
         replace_existing=True,
         coalesce=True,
         max_instances=1,
@@ -170,6 +181,14 @@ def _close_guest_access_for_voucher(db, voucher) -> None:
         )
         for record in records:
             close_guest_access(record.mac)
+            try:
+                from clarinet.app_settings import get_setting
+                from clarinet.enforcer.tc_wrapper import remove_rate_limit
+                iface = get_setting(db, "guest.interface", get_setting(db, "network_interface", ""))
+                if iface:
+                    remove_rate_limit(iface, record.mac)
+            except Exception:
+                pass
             # Update device state back (set to FORGOTTEN if it was a guest device)
             device = db.query(Device).filter(Device.mac_address == record.mac).first()
             if device and device.state == "GUEST":
@@ -278,6 +297,11 @@ def _record_fairness_used(db, member_id: int, minutes: int) -> None:
 # ──────────────────────────────────────────────
 # Reconcile
 # ──────────────────────────────────────────────
+
+def reconcile_full() -> None:
+    from clarinet.enforcer.reconcile import reconcile_now
+    reconcile_now()
+
 
 def reconcile_if_requested() -> None:
     """Apply nft rules if a reconcile was requested (e.g. after device block/unblock)."""

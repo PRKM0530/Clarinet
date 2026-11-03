@@ -65,6 +65,22 @@ def _log_attempt(ip: str, code: str, success: bool, db: Session) -> None:
     db.add(RedeemAttempt(ip=ip, code_tried=code[:32], success=success))
 
 
+def _redeem_problem(mac: str | None, voucher: Voucher, db: Session) -> str | None:
+    """Why this device cannot use a voucher right now, or None. A refused redeem does not use the voucher up."""
+    if mac is None:
+        return "We could not identify your device on this network. Connect to the Wi-Fi and try again."
+    from clarinet.models import Device
+    from clarinet.models.guest import EnforcementStatus
+    device = db.query(Device).filter(Device.mac_address == mac).first()
+    if device is not None and device.state in ("APPROVED", "BLOCKED"):
+        return ("This device already has access to the network and does not need a voucher."
+                if device.state == "APPROVED" else "This device has been blocked by the administrator.")
+    active = db.query(EnforcementStatus).filter(EnforcementStatus.mac == mac).first()
+    if active is not None and active.voucher_id != voucher.voucher_id:
+        return "This device already has an active voucher. Wait until it ends before using another."
+    return None
+
+
 def _get_mac_for_request(request: Request) -> str | None:
     """
     Best-effort: extract the guest device MAC from the request.
@@ -124,8 +140,9 @@ def _activate_voucher(voucher: Voucher, mac: str | None, db: Session) -> None:
 
         # Open nft guest access
         try:
+            from clarinet.app_settings import get_setting as _gs
             from clarinet.enforcer.nft_wrapper import open_guest_access
-            open_guest_access(mac)
+            open_guest_access(mac, interface=_gs(db, "network_interface", ""))
         except Exception:
             pass
 
@@ -197,8 +214,13 @@ def redeem_voucher(
             "error": f"This voucher has already been used.",
         })
 
-    # Valid voucher — activate
+    # The voucher is only used up when it can actually open access for this device.
     mac = _get_mac_for_request(request)
+    problem = _redeem_problem(mac, voucher, db)
+    if problem:
+        db.commit()
+        return templates.TemplateResponse("guest/portal.html", {"request": request, "error": problem})
+
     _activate_voucher(voucher, mac, db)
     _log_attempt(ip, code, True, db)
     db.commit()
@@ -291,6 +313,17 @@ def revoke_voucher(voucher_id: int, request: Request, db: Session = Depends(get_
     return RedirectResponse(url="/vouchers?info=Voucher+revoked", status_code=302)
 
 
+def _drop_speed_cap(mac: str, db: Session) -> None:
+    try:
+        from clarinet.app_settings import get_setting
+        from clarinet.enforcer.tc_wrapper import remove_rate_limit
+        iface = get_setting(db, "guest.interface", get_setting(db, "network_interface", ""))
+        if iface:
+            remove_rate_limit(iface, mac)
+    except Exception:
+        pass
+
+
 def _close_active_voucher(voucher: Voucher, db: Session) -> None:
     """Helper: close nft access and remove enforcement for an active voucher."""
     try:
@@ -305,6 +338,7 @@ def _close_active_voucher(voucher: Voucher, db: Session) -> None:
         )
         for record in records:
             close_guest_access(record.mac)
+            _drop_speed_cap(record.mac, db)
             device = db.query(Device).filter(Device.mac_address == record.mac).first()
             if device and device.state == "GUEST":
                 db.delete(device)

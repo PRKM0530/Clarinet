@@ -72,50 +72,62 @@ def setup_htb(interface: str, plan_mbps: float) -> bool:
     return True
 
 
+def _minor(mac: str) -> int:
+    """Stable class number for a device, from the last two bytes of its MAC (kept above the reserved classes)."""
+    parts = mac.split(":")
+    return max(int(parts[-2], 16) * 256 + int(parts[-1], 16), 1000)
+
+
 def set_rate_limit(interface: str, mac: str, rate_kbps: int) -> bool:
     """
-    Create or update a rate-limiting class for a specific device MAC.
-    Uses a high minor number derived from the MAC to avoid collisions.
+    Limit one device in both directions. Replaces an earlier limit for the same device.
+
+    Download (router -> device): an HTB class on the interface's egress, selected by the device's
+    destination MAC, which is already set when a frame leaves the router.
+    Upload (device -> router): a policer on the interface's ingress, selected by source MAC.
+    Every filter uses the device's class number as its priority so remove_rate_limit can find it.
     """
-    # Build a stable class ID from the last 2 bytes of MAC
-    parts = mac.split(":")
-    minor = int(parts[-2], 16) * 256 + int(parts[-1], 16)
-    minor = max(minor, 1000)   # keep above reserved classes
-    classid = f"1:{minor}"
+    mac = mac.lower()
+    minor = _minor(mac)
+    classid = f"1:{minor:x}"                  # tc reads class numbers as hexadecimal
+    remove_rate_limit(interface, mac)
 
-    _tc("class", "add", "dev", interface, "parent", "1:1", "classid", classid,
-        "htb", "rate", f"{rate_kbps}kbit", "ceil", f"{rate_kbps}kbit", "burst", "8k")
+    ok = _tc("class", "add", "dev", interface, "parent", "1:1", "classid", classid,
+             "htb", "rate", f"{rate_kbps}kbit", "ceil", f"{rate_kbps}kbit", "burst", "8k")
+    ok &= _tc("filter", "add", "dev", interface, "parent", "1:", "protocol", "all", "prio", str(minor),
+              "u32", "match", "ether", "dst", mac, "flowid", classid)
 
-    # Add MAC-based filter
-    _tc("filter", "add", "dev", interface, "parent", "1:",
-        "protocol", "all", "u32",
-        "match", "ether", "src", mac.lower(),
-        "flowid", classid)
-
+    _tc("qdisc", "add", "dev", interface, "handle", "ffff:", "ingress")        # no-op if it exists
+    ok &= _tc("filter", "add", "dev", interface, "parent", "ffff:", "protocol", "all", "prio", str(minor),
+              "u32", "match", "ether", "src", mac,
+              "police", "rate", f"{rate_kbps}kbit", "burst", "32k", "drop", "flowid", ":1")
     log.info("Rate limit %.0f kbps applied to %s (class %s)", rate_kbps, mac, classid)
-    return True
+    return bool(ok)
 
 
 def remove_rate_limit(interface: str, mac: str) -> bool:
-    """Remove rate limiting for a MAC (move back to default class)."""
-    parts = mac.split(":")
-    minor = int(parts[-2], 16) * 256 + int(parts[-1], 16)
-    minor = max(minor, 1000)
-    classid = f"1:{minor}"
-    return _tc("class", "del", "dev", interface, "classid", classid)
+    """Remove a device's limit in both directions (silently succeeds if it had none)."""
+    minor = _minor(mac.lower())
+    _tc("filter", "del", "dev", interface, "parent", "1:", "prio", str(minor))
+    _tc("filter", "del", "dev", interface, "parent", "ffff:", "prio", str(minor))
+    _tc("class", "del", "dev", interface, "classid", f"1:{minor:x}")
+    return True
+
+
+def _priority_prio(mac: str) -> int:
+    """Filter priority for a device's priority-class filter; mirrors the rate-limit one so the two never share a number."""
+    return 65_536 - _minor(mac)
 
 
 def set_priority(interface: str, mac: str) -> bool:
-    """Direct a device's traffic to the high-priority class 1:10."""
-    return _tc("filter", "add", "dev", interface, "parent", "1:",
-               "protocol", "all", "u32",
-               "match", "ether", "src", mac.lower(),
+    """Send traffic addressed to a device through the high-priority class 1:10."""
+    remove_priority(interface, mac)
+    return _tc("filter", "add", "dev", interface, "parent", "1:", "protocol", "all",
+               "prio", str(_priority_prio(mac.lower())), "u32", "match", "ether", "dst", mac.lower(),
                "flowid", "1:10")
 
 
 def remove_priority(interface: str, mac: str) -> bool:
-    """Remove priority filter for a MAC (falls back to default class)."""
-    # tc doesn't easily remove individual filters by MAC; flush and reapply all
-    # For now, log and return True; Phase 2 will implement full filter management
-    log.info("Priority removed for %s (manual filter flush may be needed)", mac)
+    """Take a device off the priority class (its filter is found by its own priority number)."""
+    _tc("filter", "del", "dev", interface, "parent", "1:", "prio", str(_priority_prio(mac.lower())))
     return True

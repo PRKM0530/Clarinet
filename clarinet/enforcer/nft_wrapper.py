@@ -84,105 +84,171 @@ table {NFT_TABLE} {{
 
 
 # ──────────────────────────────────────────────
-# Device blocking
+# Helpers to read what is already installed
 # ──────────────────────────────────────────────
 
-def block_device(mac: str) -> bool:
-    """Add a forward-drop rule for the given MAC (both src and dst)."""
-    ensure_table_exists()
-    mac = mac.lower()
-    rules = (
-        f'add rule {NFT_TABLE} {NFT_CHAIN_BLOCK} '
-        f'ether saddr {mac} drop comment "block_{mac}"\n'
-        f'add rule {NFT_TABLE} {NFT_CHAIN_BLOCK} '
-        f'ether daddr {mac} drop comment "block_{mac}"'
-    )
-    ok = _nft_input(rules)
-    if ok:
-        log.info("Blocked device %s", mac)
-    return ok
-
-
-def unblock_device(mac: str) -> bool:
-    """Remove all forward-drop rules for the given MAC."""
-    ensure_table_exists()
-    mac = mac.lower()
-    # List rules, find handles with our comment, delete them
-    result = _nft_run(["nft", "-j", "list", "chain", NFT_TABLE, NFT_CHAIN_BLOCK])
-    if not result:
-        return False
-
+def _chain_rules(chain: str) -> list[dict]:
+    """Rules currently in one of our chains, as nft's JSON objects. Empty list if unreadable."""
     from clarinet.enforcer.runner import run as _run
-    raw = _run(["nft", "-j", "list", "chain", NFT_TABLE, NFT_CHAIN_BLOCK])
+    raw = _run(["nft", "-j", "list", "chain", NFT_TABLE, chain])
     if not raw.ok:
-        return False
-
+        return []
     try:
         data = json.loads(raw.stdout)
     except Exception:
-        return False
+        return []
+    return [item["rule"] for item in data.get("nftables", []) if "rule" in item]
 
-    comment_key = f"block_{mac}"
+
+def macs_with_rules(chain: str, kind: str) -> set[str]:
+    """MACs that have rules whose comment is '<kind>_<mac>' in `chain`."""
+    prefix = f"{kind}_"
+    return {r["comment"][len(prefix):] for r in _chain_rules(chain)
+            if str(r.get("comment", "")).startswith(prefix) and ":" in str(r.get("comment", ""))}
+
+
+def _delete_rules(chain: str, comment: str) -> int:
     deleted = 0
-    for item in data.get("nftables", []):
-        rule = item.get("rule", {})
-        if rule.get("comment") == comment_key:
-            handle = rule.get("handle")
-            if handle is not None:
-                _nft_run(["nft", "delete", "rule", NFT_TABLE, NFT_CHAIN_BLOCK, "handle", str(handle)])
+    for rule in _chain_rules(chain):
+        if rule.get("comment") == comment and rule.get("handle") is not None:
+            if _nft_run(["nft", "delete", "rule", NFT_TABLE, chain, "handle", str(rule["handle"])]):
                 deleted += 1
+    return deleted
 
+
+def _has_rule(chain: str, comment: str) -> bool:
+    return any(r.get("comment") == comment for r in _chain_rules(chain))
+
+
+# ──────────────────────────────────────────────
+# Device blocking
+# ──────────────────────────────────────────────
+# Rules in the forward hook see the Ethernet header of the frame that ARRIVED, so a device is matched by
+# its source MAC when it sends, and by its IP address when traffic is addressed to it (a destination MAC
+# match would never fire here: it holds the router's own MAC).
+# kind "block"     = blocked by an administrator (managed by reconcile from the device state)
+# kind "ruleblock" = blocked by a time rule (managed by apply_time_rules)
+
+def block_device(mac: str, ip: str | None = None, kind: str = "block") -> bool:
+    """Drop everything a device sends, and everything addressed to its IP. Safe to call repeatedly."""
+    ensure_table_exists()
+    mac = mac.lower()
+    comment = f"{kind}_{mac}"
+    if _has_rule(NFT_CHAIN_BLOCK, comment):
+        return True
+    rules = f'add rule {NFT_TABLE} {NFT_CHAIN_BLOCK} ether saddr {mac} drop comment "{comment}"'
+    if ip and _is_ipv4(ip):
+        rules += f'\nadd rule {NFT_TABLE} {NFT_CHAIN_BLOCK} ip daddr {ip} drop comment "{comment}"'
+    ok = _nft_input(rules)
+    if ok:
+        log.info("Blocked device %s (%s)", mac, kind)
+    return ok
+
+
+def unblock_device(mac: str, kind: str = "block") -> bool:
+    """Remove the drop rules for a MAC."""
+    ensure_table_exists()
+    deleted = _delete_rules(NFT_CHAIN_BLOCK, f"{kind}_{mac.lower()}")
     if deleted:
-        log.info("Unblocked device %s (%d rule(s) removed)", mac, deleted)
+        log.info("Unblocked device %s (%d rule(s) removed)", mac.lower(), deleted)
     return True
+
+
+def _is_ipv4(text: str) -> bool:
+    import ipaddress
+    try:
+        return ipaddress.ip_address(text).version == 4
+    except ValueError:
+        return False
 
 
 # ──────────────────────────────────────────────
 # Guest access
 # ──────────────────────────────────────────────
+# A device in state GUEST is denied by default ("guestdeny_<mac>" in the guest chain). A voucher opens it:
+# the deny rule is removed and "guest_<mac>" marker rules are added. When the interface is a bridge, the
+# guest's frames to other ports are also dropped in a bridge-family table, so it cannot reach the LAN
+# (routed traffic to the router itself and the internet is unaffected).
 
-def open_guest_access(mac: str, internet_only: bool = True) -> bool:
-    """
-    Allow a guest device through the guest chain.
-    If internet_only=True, only forward traffic to/from the WAN interface.
-    """
+NFT_BRIDGE_TABLE = "bridge clarinet"
+
+
+def _is_bridge(interface: str) -> bool:
+    """True if `interface` is a Linux bridge (asked of `ip`, which works inside network namespaces)."""
+    if not interface:
+        return False
+    from clarinet.enforcer.runner import run as _run
+    out = _run(["ip", "-j", "-d", "link", "show", interface])
+    if not out.ok:
+        return False
+    try:
+        return any(link.get("linkinfo", {}).get("info_kind") == "bridge" for link in json.loads(out.stdout))
+    except Exception:
+        return False
+
+
+def _bridge_isolate(mac: str, on: bool) -> None:
+    comment = f"guest_{mac}"
+    from clarinet.enforcer.runner import run as _run
+    if on:
+        _nft_run(["nft", "add", "table", *NFT_BRIDGE_TABLE.split()])
+        _nft_run(["nft", "add", "chain", *NFT_BRIDGE_TABLE.split(), "forward",
+                  "{ type filter hook forward priority 0; policy accept; }"])
+        raw = _run(["nft", "-j", "list", "chain", *NFT_BRIDGE_TABLE.split(), "forward"])
+        if raw.ok and comment in raw.stdout:
+            return
+        _nft_run(["nft", "add", "rule", *NFT_BRIDGE_TABLE.split(), "forward",
+                  "ether", "saddr", mac, "drop", "comment", f'"{comment}"'])     # nft re-parses its arguments: quote the colons
+        return
+    raw = _run(["nft", "-j", "list", "chain", *NFT_BRIDGE_TABLE.split(), "forward"])
+    if not raw.ok:
+        return
+    try:
+        rules = [i["rule"] for i in json.loads(raw.stdout).get("nftables", []) if "rule" in i]
+    except Exception:
+        return
+    for rule in rules:
+        if rule.get("comment") == comment and rule.get("handle") is not None:
+            _nft_run(["nft", "delete", "rule", *NFT_BRIDGE_TABLE.split(), "forward", "handle", str(rule["handle"])])
+
+
+def deny_guest(mac: str) -> bool:
+    """Default for a guest without a valid voucher: nothing gets through."""
     ensure_table_exists()
     mac = mac.lower()
-    # Allow the guest device; block LAN access via a separate rule if needed
-    rules = (
-        f'add rule {NFT_TABLE} {NFT_CHAIN_GUEST} '
-        f'ether saddr {mac} accept comment "guest_{mac}"\n'
-        f'add rule {NFT_TABLE} {NFT_CHAIN_GUEST} '
-        f'ether daddr {mac} accept comment "guest_{mac}"'
-    )
-    ok = _nft_input(rules)
+    if _has_rule(NFT_CHAIN_GUEST, f"guestdeny_{mac}"):
+        return True
+    return _nft_input(f'add rule {NFT_TABLE} {NFT_CHAIN_GUEST} ether saddr {mac} drop comment "guestdeny_{mac}"')
+
+
+def allow_guest_again(mac: str) -> None:
+    _delete_rules(NFT_CHAIN_GUEST, f"guestdeny_{mac.lower()}")
+
+
+def open_guest_access(mac: str, internet_only: bool = True, interface: str = "") -> bool:
+    """Let a voucher holder reach the internet (and, with internet_only, not the LAN). Idempotent."""
+    ensure_table_exists()
+    mac = mac.lower()
+    allow_guest_again(mac)
+    ok = True
+    if not _has_rule(NFT_CHAIN_GUEST, f"guest_{mac}"):
+        ok = _nft_input(
+            f'add rule {NFT_TABLE} {NFT_CHAIN_GUEST} ether saddr {mac} accept comment "guest_{mac}"\n'
+            f'add rule {NFT_TABLE} {NFT_CHAIN_GUEST} ether daddr {mac} accept comment "guest_{mac}"'
+        )
+    if ok and internet_only and _is_bridge(interface):
+        _bridge_isolate(mac, True)
     if ok:
         log.info("Guest access opened for %s", mac)
     return ok
 
 
 def close_guest_access(mac: str) -> bool:
-    """Remove guest-access rules for a MAC."""
+    """Remove a guest's access rules (and its bridge isolation rule)."""
     ensure_table_exists()
     mac = mac.lower()
-    from clarinet.enforcer.runner import run as _run
-    raw = _run(["nft", "-j", "list", "chain", NFT_TABLE, NFT_CHAIN_GUEST])
-    if not raw.ok:
-        return False
-
-    try:
-        data = json.loads(raw.stdout)
-    except Exception:
-        return False
-
-    comment_key = f"guest_{mac}"
-    for item in data.get("nftables", []):
-        rule = item.get("rule", {})
-        if rule.get("comment") == comment_key:
-            handle = rule.get("handle")
-            if handle is not None:
-                _nft_run(["nft", "delete", "rule", NFT_TABLE, NFT_CHAIN_GUEST, "handle", str(handle)])
-
+    _delete_rules(NFT_CHAIN_GUEST, f"guest_{mac}")
+    _bridge_isolate(mac, False)
     log.info("Guest access closed for %s", mac)
     return True
 
@@ -227,6 +293,9 @@ def apply_time_rules() -> None:
     from clarinet.app_settings import get_setting
 
     with SessionLocal() as db:
+        from clarinet.core_svc.mode import can_enforce, parse_mode
+        if not can_enforce(parse_mode(get_setting(db, "network_mode"))):
+            return                                   # time rules only act in Full Control mode
         tz_name = get_setting(db, "timezone", "Asia/Kolkata")
         try:
             tz = ZoneInfo(tz_name)
@@ -315,17 +384,16 @@ def apply_time_rules() -> None:
 
 
 def _apply_rule_block(device, iface: str) -> None:
-    """Block a device via a time rule (marks with a special state tag)."""
-    # Use a separate flag rather than overwriting state
-    if not hasattr(device, "_rule_blocked") or not device._rule_blocked:
-        block_device(device.mac_address)
+    """Block a device via a time rule. Uses its own rule kind so reconcile never mistakes it for an admin block."""
+    if not _has_rule(NFT_CHAIN_BLOCK, f"ruleblock_{device.mac_address.lower()}"):
+        block_device(device.mac_address, device.ip_address, kind="ruleblock")
         log.info("Rule-blocked device %s (%s)", device.mac_address, device.label or "")
 
 
 def _lift_rule_block(device, iface: str) -> None:
     """Lift a rule-imposed block (does not touch admin-blocked devices)."""
     if device.state == "APPROVED":
-        unblock_device(device.mac_address)
+        unblock_device(device.mac_address, kind="ruleblock")
         if iface:
             try:
                 from clarinet.enforcer.tc_wrapper import remove_rate_limit

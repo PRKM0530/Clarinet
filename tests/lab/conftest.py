@@ -50,7 +50,7 @@ def iperf_mbps(client, reverse=False, seconds=3):
     out = ns(client, *cmd, timeout=seconds + 25)
     try:
         j = json.loads(out.stdout)
-        key = "sum_received" if reverse else "sum_sent"
+        key = "sum_received"          # what actually arrived: a policed sender still *sends* at full speed
         return j["end"][key]["bits_per_second"] / 1e6
     except Exception:
         raise AssertionError(f"iperf3 failed: {out.stdout[:200]} {out.stderr[:200]}")
