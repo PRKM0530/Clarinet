@@ -104,6 +104,7 @@ class RunningApp:
 def app():
     for ip in ("8.8.8.8", "1.1.1.1"):
         ns("internet", "ip", "addr", "add", f"{ip}/32", "dev", "lo")
+    sh("ip", "neigh", "flush", "dev", IFACE)                  # earlier lab tests leave the attacker (and others) in the table
     for client in ("a", "b", "guest"):                       # make the clients visible to the router's ARP table
         ns(client, "ping", "-c", "1", "-W", "1", ROUTER_IP)
     sh("nft", "delete", "table", "inet", "clarinet")
@@ -168,6 +169,8 @@ def test_startup_warnings_in_the_log(app):
 # Live alerts from a real scheduler job
 def test_s03_new_device_alert_reaches_a_connected_websocket(app):
     from websockets.sync.client import connect
+    from tests.lab.conftest import mac_of
+    assert mac_of("attacker") not in device_rows(app), "the attacker was already known: the test needs a brand-new device"
     cookie = "; ".join(f"{k}={v}" for k, v in app.client.cookies.items())
     with connect(f"ws://127.0.0.1:{PORT}/ws/alerts", additional_headers={"Cookie": cookie}, open_timeout=5) as ws:
         ns("attacker", "ping", "-c", "1", "-W", "1", ROUTER_IP)          # a brand-new device appears
