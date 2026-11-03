@@ -43,6 +43,8 @@ R = [
     ("POST", "/account/admin-request", "user", {}, "html"),
     ("POST", "/account/sign-out-others", "user", {}, "html"),
     ("GET", "/speed/device/due", "user", None, "json"),
+    ("POST", "/speed/device/host-test", "user", {}, "json"),
+    ("GET", "/speed/device/host-test/status", "user", None, "json"),
     ("GET", "/speed/device/probe/ping", "user", None, "json"),
     ("GET", "/speed/device/probe/down", "user", None, "json"),
     ("POST", "/speed/device/probe/up", "user", {}, "json"),

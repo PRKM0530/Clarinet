@@ -10,9 +10,7 @@
   <div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
     <div style="flex:1;min-width:220px">
       <div style="font-weight:600">Test the device you are using</div>
-      {% if claim.state == 'host' %}
-      <div class="muted">Clarinet runs on this computer, so a test here would only measure the computer talking to itself, not your network. Open Clarinet from your phone or another computer on the network and test from there.</div>
-      {% elif claim.state == 'claimable' %}
+      {% if claim.state == 'claimable' %}
       <div class="muted">You are using <strong>{{ claim.device|device_name }}</strong>. Add it to your devices first, then you can test it.</div>
       {% elif claim.state == 'pending' %}
       <div class="muted">Your request for <strong>{{ claim.device|device_name }}</strong> is waiting for an administrator. You can test it once it is confirmed.</div>
@@ -72,8 +70,8 @@
 
     <footer class="device-card-foot">
       {% if here and can_test_here %}
-      <button type="button" class="btn btn-primary btn-sm" data-device-speed-test data-note="speed-note-{{ d.device_id }}">Test this device</button>
-      <span class="muted small" id="speed-note-{{ d.device_id }}" role="status"></span>
+      <button type="button" class="btn btn-primary btn-sm" data-device-speed-test {% if on_host %}data-host="1" {% endif %}data-note="speed-note-{{ d.device_id }}">Test this device</button>
+      <span class="muted small" id="speed-note-{{ d.device_id }}" role="status">{% if on_host %}Clarinet runs on this computer, so this measures its own internet connection and takes about a minute.{% endif %}</span>
       {% else %}
       <span class="muted small">To test this device, open Clarinet on it.</span>
       {% endif %}

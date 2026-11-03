@@ -69,6 +69,17 @@ To open Clarinet from a phone or another computer, set `APP_HOST=0.0.0.0` in `.e
 
 After about 15 seconds the Devices page lists what the machine can see. A speed test runs at start-up.
 
+### Try it with demo data
+
+To see every page filled in without waiting for real traffic, build an invented demo network and start the app on it:
+
+```bash
+python tools/demo_data.py
+DATABASE_URL=sqlite:///./clarinet_demo.db python run.py       # PowerShell: $env:DATABASE_URL="sqlite:///./clarinet_demo.db"; python run.py
+```
+
+Sign in as `praveen` / `pw-admin-123` (administrator) or `asha` / `pw-asha-1234` (member).
+
 ### Running as root (Linux, for the full feature set)
 
 Raw packet sniffing, the port-scan and DNS observers and Full Control need root. Keep the virtual environment's tools on the path:

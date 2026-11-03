@@ -196,3 +196,27 @@ def test_the_admin_cannot_store_a_speed_result_for_a_members_device(monkeypatch)
     monkeypatch.setattr(devicespeed, "detect_device", lambda db, ip: db.get(Device, ids["d_alice"]))
     body = {"download_mbps": 40, "upload_mbps": 8, "latency_ms": 15}
     assert new_client(ADMIN).post("/speed/device/result", json=body).status_code == 403
+
+
+def test_the_computer_that_runs_clarinet_tests_its_own_internet_connection(monkeypatch):
+    ids = seed_world()
+    from clarinet.routers import devicespeed
+    monkeypatch.setattr("clarinet.collector.speed_test._run_speedtest_cli",
+                        lambda: {"download_mbps": 88.5, "upload_mbps": 17.2, "latency_ms": 14.0})
+    devicespeed._host_worker(ids["d_alice"], ids["alice"])
+    assert devicespeed._host["error"] is None and devicespeed._host["running"] is False
+    with SessionLocal() as db:
+        row = db.query(DeviceSpeedResult).one()
+        assert row.device_id == ids["d_alice"] and row.download_mbps == 88.5
+
+
+def test_host_test_is_only_for_the_host_and_the_owner(monkeypatch):
+    ids = seed_world()
+    from clarinet.routers import devicespeed
+    alice = new_client(ALICE)
+    monkeypatch.setattr(devicespeed, "is_clarinet_host", lambda ip: False)
+    assert alice.post("/speed/device/host-test").status_code == 400            # from another device: use the normal test
+    monkeypatch.setattr(devicespeed, "is_clarinet_host", lambda ip: True)
+    monkeypatch.setattr(devicespeed, "detect_device", lambda db, ip: db.get(Device, ids["d_bob"]))
+    assert alice.post("/speed/device/host-test").status_code == 403            # not alice's device
+    assert new_client().post("/speed/device/host-test").status_code == 401

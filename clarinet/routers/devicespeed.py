@@ -11,6 +11,8 @@ The device is recognised by the address the request comes from, the same way
 "This is my device" works. A member can only test (and so only store results for)
 a device they own. An administrator can test the device they are using.
 """
+import threading
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -19,9 +21,15 @@ from clarinet.auth import client_ip, get_session_user
 from clarinet.core_svc import device_speed
 from clarinet.core_svc.accounts import detect_device, is_clarinet_host
 from clarinet.database import get_db
+from clarinet.models import Device
 from clarinet.models.devspeed import DeviceSpeedResult
 
 router = APIRouter(prefix="/speed/device", tags=["device-speed"])
+
+# The computer that runs Clarinet cannot test its link to Clarinet (that would only be the computer talking to
+# itself), so for that one device the test measures its own connection to the internet instead.
+_host = {"running": False, "error": None}
+_host_lock = threading.Lock()
 
 MAX_PROBE_BYTES = 8 * 1024 * 1024
 CHUNK = 64 * 1024
@@ -30,6 +38,56 @@ NO_STORE = {"Cache-Control": "no-store, no-transform", "Content-Encoding": "iden
 
 def _unauthorised():
     return JSONResponse({"error": "Sign in first."}, status_code=401)
+
+
+def _host_worker(device_id: int, member_id: int) -> None:
+    from clarinet.collector.speed_test import _run_speedtest_cli
+    from clarinet.database import SessionLocal
+    error = None
+    try:
+        raw = _run_speedtest_cli()
+        if raw is None:
+            error = ("No speed test tool answered. Install one with: pip install speedtest-cli, "
+                     "and check that this computer is online.")
+        else:
+            with SessionLocal() as db:
+                device_speed.record(db, db.get(Device, device_id), member_id,
+                                    raw["download_mbps"], raw["upload_mbps"], raw["latency_ms"])
+    except device_speed.Refused as refused:
+        error = str(refused)
+    except Exception:
+        error = "The test did not finish."
+    with _host_lock:
+        _host["running"], _host["error"] = False, error
+
+
+@router.post("/host-test")
+def start_host_test(request: Request, db: Session = Depends(get_db)):
+    """Measure the internet connection of the computer that runs Clarinet, for that computer's own device."""
+    user = get_session_user(request, db)
+    if user is None:
+        return _unauthorised()
+    ip = client_ip(request)
+    if not is_clarinet_host(ip):
+        return JSONResponse({"error": "This is only for the computer that runs Clarinet."}, status_code=400)
+    device = detect_device(db, ip)
+    if device is None or not device_speed.may_measure(user, device):
+        return JSONResponse({"error": "Press \"This is my device\" first, so the test can be saved for this computer."},
+                            status_code=403)
+    with _host_lock:
+        if _host["running"]:
+            return {"running": True}
+        _host["running"], _host["error"] = True, None
+    threading.Thread(target=_host_worker, args=(device.device_id, user.member_id), daemon=True).start()
+    return {"running": True}
+
+
+@router.get("/host-test/status")
+def host_test_status(request: Request, db: Session = Depends(get_db)):
+    if get_session_user(request, db) is None:
+        return _unauthorised()
+    with _host_lock:
+        return dict(_host)
 
 
 @router.get("/due")

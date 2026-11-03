@@ -53,11 +53,12 @@ def speed_page(request: Request, db: Session = Depends(get_db)):
         from clarinet.core_svc.accounts import claim_state, is_clarinet_host
         on_host = is_clarinet_host(client_ip(request))
         context.update({
-            "claim": {"state": "host" if on_host else claim_state(db, here, user), "device": here},
+            "claim": {"state": claim_state(db, here, user), "device": here},
+            "on_host": on_host,
             "test_interval": device_speed.test_interval_minutes(db),
             "cards": [device_speed.summary(db, d) for d in device_speed.devices_for(db, user)],
             "this_device": here,
-            "can_test_here": bool(not on_host and here is not None and device_speed.may_measure(user, here)),
+            "can_test_here": bool(here is not None and device_speed.may_measure(user, here)),
         })
         return templates.TemplateResponse("speed/index.html", context)
 

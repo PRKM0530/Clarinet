@@ -74,10 +74,28 @@
     return data;
   }
 
+  /** The computer that runs Clarinet: measure its own internet connection on the server and wait for it. */
+  async function hostTest(say) {
+    const start = await fetch(`${BASE}/host-test`, { method: 'POST', credentials: 'same-origin' });
+    const first = await start.json().catch(() => ({}));
+    if (!start.ok) throw new Error(first.error || 'The test could not start.');
+    say('Measuring this computer\'s internet speed. This takes about a minute...');
+    for (let i = 0; i < 60; i++) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const status = await (await fetch(`${BASE}/host-test/status`, { credentials: 'same-origin', cache: 'no-store' })).json();
+      if (!status.running) {
+        if (status.error) throw new Error(status.error);
+        return;
+      }
+    }
+    throw new Error('The test is taking too long. Try again in a moment.');
+  }
+
   async function run(button, say) {
     button.disabled = true;
     try {
-      await measureAndSave(say);
+      if (button.dataset.host) await hostTest(say);
+      else await measureAndSave(say);
       location.reload();
     } catch (error) {
       const own = error && error.message && !['ping', 'download', 'upload'].includes(error.message);
