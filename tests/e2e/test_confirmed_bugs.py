@@ -22,22 +22,18 @@ def world():
 
 
 # S-22: bad input must not cause 500s
-@pytest.mark.xfail(strict=True, reason="S-22: /alerts?page=abc returns 500")
 def test_s22_alerts_non_numeric_page(world):
     assert new_client(ADMIN).get("/alerts?page=abc").status_code < 500
 
 
-@pytest.mark.xfail(strict=True, reason="S-22: /reports?date=0001-01-01 returns 500")
 def test_s22_reports_year_one(world):
     assert new_client(ADMIN).get("/reports?date=0001-01-01").status_code < 500
 
 
-@pytest.mark.xfail(strict=True, reason="S-22: /api/v1/latency?hours=99999999999 returns 500")
 def test_s22_latency_huge_hours(world):
     assert new_client(ADMIN).get("/api/v1/latency?hours=99999999999").status_code < 500
 
 
-@pytest.mark.xfail(strict=True, reason="S-22: junk plan speed saved by settings then breaks /speed")
 def test_s22_junk_plan_speed_does_not_break_pages(world):
     c = new_client(ADMIN)
     c.post("/settings/update", data={"plan_download_mbps": "abc"})
@@ -54,7 +50,6 @@ def test_s12_member_status_is_scoped_to_own_devices(world):
 
 
 # S-11: router IP saved in Settings must be stored and pinged
-@pytest.mark.xfail(strict=True, reason="S-11: /settings/update ignores router_ip")
 def test_s11_router_ip_is_saved(world):
     from clarinet.app_settings import get_setting
     from clarinet.database import SessionLocal

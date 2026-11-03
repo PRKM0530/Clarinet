@@ -281,11 +281,12 @@ def revoke_voucher(voucher_id: int, request: Request, db: Session = Depends(get_
 
     voucher = db.get(Voucher, voucher_id)
     if voucher and voucher.status in ("UNUSED", "ACTIVE"):
-        if voucher.status == "ACTIVE":
+        previous = voucher.status
+        if previous == "ACTIVE":
             _close_active_voucher(voucher, db)
         voucher.status = "REVOKED"
         audit(db, user.member_id, "REVOKE_VOUCHER", "Voucher", voucher_id,
-              {"previous_status": voucher.status})
+              {"previous_status": previous})
         db.commit()
     return RedirectResponse(url="/vouchers?info=Voucher+revoked", status_code=302)
 

@@ -23,7 +23,9 @@ def _parse_day(raw: str | None, fallback: date) -> date:
         day = date.fromisoformat(raw) if raw else fallback
     except ValueError:
         return fallback
-    return min(day, datetime.now(timezone.utc).date())
+    today = datetime.now(timezone.utc).date()
+    oldest = today - timedelta(days=3650)          # ten years back is plenty; avoids date overflow
+    return max(min(day, today), oldest)
 
 
 @router.get("/reports", response_class=HTMLResponse)

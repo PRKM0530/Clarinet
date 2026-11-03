@@ -38,9 +38,10 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
     # Summary counts
     total_devices = scope_devices(db.query(func.count(Device.device_id))).scalar() or 0
+    from clarinet.core_svc.presence import online_cutoff
     online_devices = (
         scope_devices(db.query(func.count(Device.device_id)))
-        .filter(Device.state == "APPROVED")
+        .filter(Device.last_seen >= online_cutoff(), Device.state != "BLOCKED")
         .scalar() or 0
     )
     new_devices = (
@@ -65,8 +66,9 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     )
 
     # Latest speed test (a network-wide measurement, fine for everyone)
+    from clarinet.core_svc.speed_filters import valid_only
     latest_speed = (
-        db.query(SpeedTestResult)
+        valid_only(db.query(SpeedTestResult))
         .order_by(SpeedTestResult.tested_at.desc())
         .first()
     )

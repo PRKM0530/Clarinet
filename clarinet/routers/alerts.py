@@ -32,7 +32,10 @@ def alerts_page(request: Request, db: Session = Depends(get_db)):
     # Filters
     level_filter = request.query_params.get("level", "")
     status_filter = request.query_params.get("status", "OPEN")
-    page = max(1, int(request.query_params.get("page", "1")))
+    try:
+        page = min(max(1, int(request.query_params.get("page", "1"))), 100_000)
+    except ValueError:
+        page = 1
     per_page = 20
 
     from clarinet.core_svc.permissions import visible_alerts

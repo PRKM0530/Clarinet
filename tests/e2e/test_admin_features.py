@@ -67,7 +67,6 @@ def test_adm01_valid_setup_saves_values_and_closes_the_wizard(fresh, day):
     assert new_client().post("/login", data={"username": "owner", "password": "pw-12345678"}).status_code == 302
 
 
-@pytest.mark.xfail(strict=True, reason="N-05: setup accepts zero or negative plan speeds")
 @pytest.mark.parametrize("bad", ["0", "-10"])
 def test_adm01_plan_speed_must_be_positive(fresh, bad):
     assert new_client().post("/setup/admin", data=GOOD | {"plan_download": bad}).status_code == 422
@@ -92,7 +91,6 @@ def test_adm06_validated_fields_refuse_bad_values(field, value):
     assert "error=" in r.headers["location"]
 
 
-@pytest.mark.xfail(strict=True, reason="N-06: /settings/update saves any text for mode, billing day, plan speeds, multiplier")
 @pytest.mark.parametrize("field,value", [("network_mode", "BANANA"), ("billing_day", "29"), ("billing_day", "0"),
                                          ("billing_day", "abc"), ("plan_download_mbps", "-5"),
                                          ("plan_upload_mbps", "abc"), ("slowdown_latency_multiplier", "abc")])
@@ -129,7 +127,6 @@ def test_adm05_unknown_role_becomes_member():
         assert db.query(Member).filter_by(username="eve").one().role == "MEMBER"
 
 
-@pytest.mark.xfail(strict=True, reason="N-07: blank or whitespace-only usernames are accepted")
 @pytest.mark.parametrize("name", ["", "   "])
 def test_adm05_blank_username_is_refused(name):
     from clarinet.database import SessionLocal
@@ -140,7 +137,6 @@ def test_adm05_blank_username_is_refused(name):
         assert not db.query(Member).filter(Member.username == "").count() and "error=" in r.headers.get("location", "error=")
 
 
-@pytest.mark.xfail(strict=True, reason="N-07: 'alice ' passes the duplicate check, is stripped to 'alice' and crashes the insert")
 def test_adm05_name_with_trailing_space_cannot_duplicate_a_member():
     seed_world()
     r = new_client(ADMIN).post("/settings/members/create", data={"username": "alice ", "password": "pw-12345678"})

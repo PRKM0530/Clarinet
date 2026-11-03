@@ -142,7 +142,6 @@ def test_s13_lockout_settings_are_honoured(world, monkeypatch):
     assert locked.status_code == 401
 
 
-@pytest.mark.xfail(strict=True, reason="S-19: 'online' counts approved devices, not recently seen ones")
 def test_s19_online_count_uses_last_seen(world):
     from datetime import datetime, timedelta, timezone
     from clarinet.database import SessionLocal

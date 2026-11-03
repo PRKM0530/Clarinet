@@ -112,8 +112,9 @@ def _below_plan_consistently(db, plan_download_mbps: float, plan_upload_mbps: fl
     are below 80% of the plan speed.  Single failures are ignored (F-08f).
     """
     from clarinet.models import SpeedTestResult
+    from clarinet.core_svc.speed_filters import valid_only
     recent = (
-        db.query(SpeedTestResult)
+        valid_only(db.query(SpeedTestResult))
         .order_by(SpeedTestResult.tested_at.desc())
         .limit(BELOW_PLAN_WINDOW)
         .all()

@@ -154,13 +154,19 @@ def _speed_below_plan_check(db) -> bool:
         plan_dl = float(get_setting(db, "plan_download_mbps", "0") or 0)
         if plan_dl <= 0:
             return False
+        from clarinet.core_svc.speed_filters import valid_only
         latest = (
-            db.query(SpeedTestResult)
+            valid_only(db.query(SpeedTestResult))
             .order_by(SpeedTestResult.tested_at.desc())
             .first()
         )
+        try:
+            threshold = float(get_setting(db, "slowdown_speed_threshold", str(SPEED_THRESHOLD)))
+        except ValueError:
+            threshold = SPEED_THRESHOLD
+        threshold = min(max(threshold, 0.05), 1.0)
         if latest and not latest.busy:
-            return latest.download_mbps < plan_dl * SPEED_THRESHOLD
+            return latest.download_mbps < plan_dl * threshold
     except Exception:
         pass
     return False

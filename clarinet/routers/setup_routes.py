@@ -79,6 +79,8 @@ def wizard_create_admin(
         errors.append("Invalid network mode.")
     if not (1 <= billing_day <= 28):
         errors.append("Billing day must be between 1 and 28.")
+    if not (0 < plan_download <= 100_000) or not (0 < plan_upload <= 100_000):      # also rejects NaN
+        errors.append("Plan speeds must be numbers above zero.")
 
     # NFR-21: the administrator confirms they are allowed to monitor this network
     if consent != "yes":

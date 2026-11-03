@@ -37,7 +37,6 @@ def _set(key, value):
         db.commit()
 
 
-@pytest.mark.xfail(strict=True, reason="S-04: a failed run is stored as a 0 Mbps sample and drives slowdown detection")
 def test_s04_failed_speed_run_does_not_look_like_a_slow_line(world, monkeypatch):
     from clarinet.analytics.diagnosis import _speed_below_plan_check
     from clarinet.database import SessionLocal
@@ -47,7 +46,6 @@ def test_s04_failed_speed_run_does_not_look_like_a_slow_line(world, monkeypatch)
         assert _speed_below_plan_check(db) is False
 
 
-@pytest.mark.xfail(strict=True, reason="S-04: failed runs are counted as real tests in the plan-vs-speed report")
 def test_s04_failed_speed_run_is_not_in_the_speed_report(world, monkeypatch):
     from clarinet.core_svc.speed_report import build_speed_report
     from clarinet.database import SessionLocal
@@ -58,7 +56,6 @@ def test_s04_failed_speed_run_is_not_in_the_speed_report(world, monkeypatch):
     assert report.tests == []
 
 
-@pytest.mark.xfail(strict=True, reason="S-15: slowdown_speed_threshold setting is ignored (0.50 is hard-coded)")
 def test_s15_speed_threshold_setting_is_used(world):
     from clarinet.analytics.diagnosis import _speed_below_plan_check
     from clarinet.database import SessionLocal
@@ -72,7 +69,6 @@ def test_s15_speed_threshold_setting_is_used(world):
         assert _speed_below_plan_check(db) is True     # 80 Mbps is below 90% of a 100 Mbps plan
 
 
-@pytest.mark.xfail(strict=True, reason="S-21: naive UTC timestamps go through astimezone() and use the host zone")
 def test_s21_speed_csv_time_is_correct_on_a_non_utc_host(world):
     from clarinet.database import SessionLocal
     from clarinet.models import SpeedTestResult
@@ -103,7 +99,6 @@ def _voucher_code(minutes="60"):
         return db.query(Voucher).order_by(Voucher.voucher_id.desc()).first().code
 
 
-@pytest.mark.xfail(strict=True, reason="S-24: revoke audit record always says previous_status=REVOKED")
 def test_s24_revoke_audit_records_the_previous_status(world):
     import json
     from clarinet.database import SessionLocal

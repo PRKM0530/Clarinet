@@ -110,7 +110,8 @@ def export_speed_csv(request: Request, db: Session = Depends(get_db)):
     writer.writerow(["Time", "Download (Mbps)", "Upload (Mbps)", "Latency (ms)", "Busy", "Below Plan", "Server"])
 
     for r in results:
-        local_time = r.tested_at.astimezone(tz).strftime("%Y-%m-%d %H:%M")
+        when = r.tested_at if r.tested_at.tzinfo else r.tested_at.replace(tzinfo=timezone.utc)   # stored as naive UTC
+        local_time = when.astimezone(tz).strftime("%Y-%m-%d %H:%M")
         writer.writerow([
             local_time,
             r.download_mbps,
@@ -154,8 +155,9 @@ def speed_summary(request: Request, db: Session = Depends(get_db)):
     plan_dl = float(get_setting(db, "plan_download_mbps", "0") or 0)
     plan_ul = float(get_setting(db, "plan_upload_mbps", "0") or 0)
 
+    from clarinet.core_svc.speed_filters import valid_only
     latest = (
-        db.query(SpeedTestResult)
+        valid_only(db.query(SpeedTestResult))
         .order_by(SpeedTestResult.tested_at.desc())
         .first()
     )

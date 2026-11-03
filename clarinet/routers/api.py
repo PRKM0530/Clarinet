@@ -47,7 +47,9 @@ def api_status(request: Request, db: Session = Depends(get_db)):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     total_devices  = db.query(func.count(Device.device_id)).scalar() or 0
-    online_devices = db.query(func.count(Device.device_id)).filter(Device.state == "APPROVED").scalar() or 0
+    from clarinet.core_svc.presence import online_cutoff
+    online_devices = db.query(func.count(Device.device_id)).filter(
+        Device.last_seen >= online_cutoff(), Device.state != "BLOCKED").scalar() or 0
     new_devices    = db.query(func.count(Device.device_id)).filter(Device.state == "NEW").scalar() or 0
     open_alerts    = db.query(func.count(Alert.alert_id)).filter(Alert.status == "OPEN").scalar() or 0
     critical_alerts = db.query(func.count(Alert.alert_id)).filter(
@@ -61,7 +63,8 @@ def api_status(request: Request, db: Session = Depends(get_db)):
         func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out)
     ).filter(UsageRecord.date == today).scalar() or 0
 
-    latest_speed = db.query(SpeedTestResult).order_by(SpeedTestResult.tested_at.desc()).first()
+    from clarinet.core_svc.speed_filters import valid_only
+    latest_speed = valid_only(db.query(SpeedTestResult)).order_by(SpeedTestResult.tested_at.desc()).first()
 
     return {
         "total_devices": total_devices,
@@ -162,6 +165,7 @@ def api_latency(
     if err:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
+    hours = min(max(hours, 1), 24 * 365)           # a huge value would overflow the date arithmetic
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     try:
@@ -241,8 +245,9 @@ def api_speed(
     if err:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
+    from clarinet.core_svc.speed_filters import valid_only
     results = (
-        db.query(SpeedTestResult)
+        valid_only(db.query(SpeedTestResult))
         .order_by(SpeedTestResult.tested_at.desc())
         .limit(limit)
         .all()

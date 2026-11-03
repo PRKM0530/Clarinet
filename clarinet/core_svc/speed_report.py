@@ -76,8 +76,9 @@ def build_speed_report(db: Session, days: int = 30, now: datetime | None = None)
         threshold_pct=threshold,
     )
 
+    from clarinet.core_svc.speed_filters import valid_only
     rows = (
-        db.query(SpeedTestResult)
+        valid_only(db.query(SpeedTestResult))
         .filter(SpeedTestResult.tested_at >= start)
         .order_by(SpeedTestResult.tested_at.desc())
         .all()

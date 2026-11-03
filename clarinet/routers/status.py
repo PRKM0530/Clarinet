@@ -102,7 +102,8 @@ def status_page(request: Request, db: Session = Depends(get_db)):
     mode = parse_mode(raw_mode)
 
     total_devices = db.query(Device).count()
-    online_devices = db.query(Device).filter(Device.state == "APPROVED").count()
+    from clarinet.core_svc.presence import online_cutoff
+    online_devices = db.query(Device).filter(Device.last_seen >= online_cutoff(), Device.state != "BLOCKED").count()
     new_devices = db.query(Device).filter(Device.state == "NEW").count()
     open_alerts = db.query(Alert).filter(Alert.status == "OPEN").count()
 

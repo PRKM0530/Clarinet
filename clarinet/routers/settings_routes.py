@@ -7,6 +7,7 @@ manually calling request.form() (which is an awaitable in Starlette).
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+import ipaddress
 from typing import Optional
 
 from clarinet import templates
@@ -53,6 +54,35 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     })
 
 
+def _number(text, low, high, whole=False):
+    """The parsed number if `text` is a finite number in [low, high], otherwise None."""
+    try:
+        value = int(text) if whole else float(text)
+    except (TypeError, ValueError):
+        return None
+    if value != value or not (low <= value <= high):      # NaN or out of range
+        return None
+    return value
+
+
+def _validate_settings(params: dict) -> str | None:
+    """Return an error code for the first invalid value, or None. Blank values are skipped."""
+    checks = [
+        ("network_mode", lambda v: v.upper() in ("FULL", "MONITOR", "PUBLIC"), "bad_mode"),
+        ("plan_download_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
+        ("plan_upload_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
+        ("billing_day", lambda v: _number(v, 1, 28, whole=True) is not None, "bad_billing_day"),
+        ("speed_test_interval_hours", lambda v: _number(v, 1, 168, whole=True) is not None, "bad_interval"),
+        ("slowdown_latency_multiplier", lambda v: _number(v, 1.0, 20.0) is not None, "bad_multiplier"),
+        ("slowdown_speed_threshold", lambda v: _number(v, 0.05, 1.0) is not None, "bad_threshold_ratio"),
+    ]
+    for key, ok, code in checks:
+        value = params.get(key)
+        if value is not None and value.strip() != "" and not ok(value.strip()):
+            return code
+    return None
+
+
 # POST /settings/update — explicit Form() params
 
 @router.post("/update")
@@ -68,6 +98,7 @@ def update_settings(
     speed_test_interval_hours: Optional[str] = Form(None),
     slowdown_latency_multiplier: Optional[str] = Form(None),
     slowdown_speed_threshold: Optional[str]    = Form(None),
+    router_ip: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     result = require_admin(request, db)
@@ -85,6 +116,23 @@ def update_settings(
         "slowdown_latency_multiplier": slowdown_latency_multiplier,
         "slowdown_speed_threshold": slowdown_speed_threshold,
     }
+
+    # Router address used as the "router" ping target. Blank clears it; anything else must be a real IP.
+    if router_ip is not None:
+        router_ip = router_ip.strip()
+        if router_ip:
+            try:
+                ipaddress.ip_address(router_ip)
+            except ValueError:
+                return RedirectResponse(url="/settings?error=bad_router_ip", status_code=302)
+        params["router_ip"] = router_ip
+
+    # Reject nonsense before it is stored: a bad value here would later break pages that read it.
+    error = _validate_settings(params)
+    if error:
+        return RedirectResponse(url=f"/settings?error={error}", status_code=302)
+    for key in [k for k, v in params.items() if v is not None and v.strip() == "" and k != "router_ip"]:
+        params[key] = None                       # an empty box means "leave unchanged"
 
     # Monthly data limit: blank means no limit; otherwise GB -> bytes under "limit.bytes".
     if monthly_limit_gb is not None:
@@ -107,6 +155,8 @@ def update_settings(
             return RedirectResponse(url="/settings?error=bad_threshold", status_code=302)
         params["speed_report_threshold_pct"] = text
 
+    if params.get("network_mode"):
+        params["network_mode"] = params["network_mode"].strip().upper()
     changed = []
     for key, val in params.items():
         if val is not None:
@@ -159,6 +209,10 @@ def create_member(
         return result
     user = result
 
+    username = username.strip()
+    if len(username) < 3:
+        return RedirectResponse(url="/settings?error=bad_username", status_code=302)
+
     if db.query(Member).filter(Member.username == username).first():
         return RedirectResponse(url="/settings?error=username_taken", status_code=302)
 
@@ -166,7 +220,7 @@ def create_member(
         return RedirectResponse(url="/settings?error=password_too_short", status_code=302)
 
     new_member = Member(
-        username=username.strip(),
+        username=username,
         password_hash=hash_password(password),
         role=role if role in ("ADMIN", "MEMBER") else "MEMBER",
         is_active=True,
