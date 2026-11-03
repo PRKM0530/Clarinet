@@ -141,6 +141,60 @@ async def refuse_cross_site_posts(request: Request, call_next):
     return await call_next(request)
 
 
+# Errors: a person gets a readable page with a way back; scripts and the JSON API keep a JSON body.
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+_ERROR_TEXT = {
+    403: ("You cannot do that", "You do not have permission for this."),
+    404: ("Page not found", "That page does not exist, or it was removed."),
+    405: ("That is not allowed here", "This address cannot be used that way."),
+    422: ("Some details were not right", "One of the boxes had a value the app could not use. Go back, check what you typed and try again."),
+}
+
+
+def _wants_json(request: Request) -> bool:
+    path = request.url.path
+    return path.startswith(("/api", "/slowdowns/api", "/speed/summary", "/rules/summary", "/priority/summary",
+                            "/security/summary", "/ws")) or "text/html" not in request.headers.get("accept", "")
+
+
+def _error_page(request: Request, status: int, fallback):
+    from fastapi.responses import JSONResponse
+    heading, message = _ERROR_TEXT.get(status, ("Something went wrong", "The app hit a problem. Try again, and tell the administrator if it keeps happening."))
+    signed_in = bool(request.session.get("user_id")) if "session" in request.scope else False
+    return templates.TemplateResponse("error.html", {
+        "request": request, "heading": heading, "message": message,
+        "home": "/dashboard" if signed_in else "/login", "home_label": "Dashboard" if signed_in else "Sign in",
+    }, status_code=status)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    from fastapi.exception_handlers import http_exception_handler
+    if _wants_json(request):
+        return await http_exception_handler(request, exc)
+    return _error_page(request, exc.status_code, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    from fastapi.exception_handlers import request_validation_exception_handler
+    if _wants_json(request):
+        return await request_validation_exception_handler(request, exc)
+    return _error_page(request, 422, exc)
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception):
+    import logging
+    logging.getLogger("clarinet").exception("Unhandled error on %s", request.url.path)
+    from fastapi.responses import PlainTextResponse
+    if _wants_json(request):
+        return PlainTextResponse("Internal Server Error", status_code=500)
+    return _error_page(request, 500, exc)
+
+
 # Serve Bootstrap 5, Bootstrap Icons, Chart.js from /static/
 STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

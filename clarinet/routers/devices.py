@@ -126,7 +126,7 @@ def rename_device(
     label: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    result = require_admin(request, db)
+    result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
@@ -137,6 +137,8 @@ def rename_device(
     device = db.get(Device, device_id)
     if device is None:
         return RedirectResponse(url="/devices?error=not_found", status_code=302)
+    if not user.is_admin and device.owner_member_id != user.member_id:      # a member may label their own devices
+        return RedirectResponse(url="/devices?error=forbidden", status_code=302)
 
     old_label = device.label
     device.label = label.strip()[:128]

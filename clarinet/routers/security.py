@@ -123,7 +123,7 @@ def scan_wifi(request: Request, db: Session = Depends(get_db)):
 @router.post("/access-points/trust")
 def trust_access_point(
     request: Request,
-    bssid: list[str] = Form(...),
+    bssid: list[str] = Form([]),
     label: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -131,6 +131,8 @@ def trust_access_point(
     result = require_admin(request, db)
     if isinstance(result, RedirectResponse):
         return result
+    if not bssid:
+        return _back("ap_none")
 
     for raw in bssid:
         bssid_value = raw.strip().upper()

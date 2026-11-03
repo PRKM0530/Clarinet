@@ -156,6 +156,16 @@ def logout_user(request: Request, db: "Session | None" = None) -> None:
     request.session.clear()
 
 
+def end_other_sessions(db: "Session", member_id: int, keep_sid: "str | None") -> None:
+    """Sign a member out everywhere except the session they are using now."""
+    from clarinet.models.sessions import ActiveSession
+    q = db.query(ActiveSession).filter(ActiveSession.member_id == member_id)
+    if keep_sid:
+        q = q.filter(ActiveSession.sid != keep_sid)
+    q.delete(synchronize_session=False)
+    db.commit()
+
+
 def end_sessions(db: "Session", member_id: int) -> None:
     """Log a member out everywhere (disabled account, password reset)."""
     from clarinet.models.sessions import ActiveSession

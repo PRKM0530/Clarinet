@@ -68,7 +68,8 @@
           </td>
           <td style="text-align:right;padding-right:14px">
             <div style="display:flex;gap:4px;justify-content:flex-end">
-              {% if d.state != 'APPROVED' %}
+              {% if user.is_admin %}
+              {% if d.state != 'APPROVED' and d.state != 'BLOCKED' %}
               <button class="btn btn-success btn-sm btn-icon" title="Approve"
                       onclick="openApprove({{ d.device_id }}, '{{ d.mac_address }}', '{{ d.hostname or '' }}')">Approve</button>
               {% endif %}
@@ -77,6 +78,12 @@
                     onsubmit="return confirm('Block {{ d.mac_address }}?')">
                 <button class="btn btn-danger btn-sm btn-icon" title="Block">Block</button>
               </form>
+              {% else %}
+              <form method="post" action="/devices/{{ d.device_id }}/unblock"
+                    onsubmit="return confirm('Let {{ d.mac_address }} back onto the network?')">
+                <button class="btn btn-success btn-sm btn-icon" title="Unblock">Unblock</button>
+              </form>
+              {% endif %}
               {% endif %}
               <a href="/devices/{{ d.device_id }}" class="btn btn-ghost btn-sm btn-icon" title="Details">Details</a>
             </div>
@@ -99,6 +106,7 @@
 </div>
 
 <!-- Approve Modal -->
+{% if user.is_admin %}
 <div class="modal-overlay" id="approve-modal">
   <div class="modal-box">
     <div class="modal-header">
@@ -132,6 +140,7 @@
     </form>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -144,6 +153,7 @@ document.getElementById('device-search').addEventListener('input', function() {
   });
 });
 
+{% if user.is_admin %}
 // Approve modal
 function openApprove(id, mac, hostname) {
   document.getElementById('approve-form').action = '/devices/' + id + '/approve';
@@ -155,5 +165,6 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 document.getElementById('approve-modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal('approve-modal');
 });
+{% endif %}
 </script>
 {% endblock %}

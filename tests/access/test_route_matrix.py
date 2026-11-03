@@ -33,6 +33,9 @@ R = [
     ("GET", "/dashboard", "user", None, "html"),
     ("GET", "/devices", "user", None, "html"),
     ("GET", "/devices/{d_alice}", "user", None, "html"),
+    ("POST", "/devices/{d_alice}/rename", "user", {"label": "x"}, "html"),
+    ("GET", "/account", "user", None, "html"),
+    ("POST", "/account/password", "user", {"current_password": "wrong", "new_password": "pw-new-12345", "confirm_password": "pw-new-12345"}, "html"),
     ("GET", "/export/devices.csv", "user", None, "html"),
     ("GET", "/alerts", "user", None, "html"),
     ("POST", "/alerts/{alert_id}/ack", "user", {}, "html"),
@@ -56,7 +59,6 @@ R = [
     ("GET", "/api/v1/latency", "user", None, "json"),
     ("GET", "/api/v1/usage/today", "user", None, "json"),
 
-    ("POST", "/devices/{d_new}/rename", "admin", {"label": "x"}, "html"),
     ("POST", "/devices/{d_new}/approve", "admin", {"label": "x"}, "html"),
     ("POST", "/devices/{d_new}/owner", "admin", {"owner_id": "{alice}"}, "html"),
     ("POST", "/devices/{d_new}/merge", "admin", {"other_id": "{d_free}"}, "html"),

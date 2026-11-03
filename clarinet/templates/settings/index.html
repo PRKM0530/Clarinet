@@ -129,9 +129,15 @@
               </td>
               <td style="text-align:right;padding-right:14px">
                 {% if m.member_id != user.member_id %}
-                <form method="post" action="/settings/members/{{ m.member_id }}/toggle">
-                  <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Deactivate' if m.is_active else 'Activate' }}">{{ 'Deactivate' if m.is_active else 'Activate' }}</button>
-                </form>
+                <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
+                  <form method="post" action="/settings/members/{{ m.member_id }}/reset-password" style="display:flex;gap:4px">
+                    <input aria-label="New password for {{ m.username }}" type="password" name="new_password" class="form-input" style="width:140px" placeholder="New password" required minlength="8" />
+                    <button class="btn btn-ghost btn-sm" title="Set a new password for {{ m.username }}">Reset password</button>
+                  </form>
+                  <form method="post" action="/settings/members/{{ m.member_id }}/toggle">
+                    <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Deactivate' if m.is_active else 'Activate' }}">{{ 'Deactivate' if m.is_active else 'Activate' }}</button>
+                  </form>
+                </div>
                 {% endif %}
               </td>
             </tr>
@@ -148,7 +154,7 @@
         <span class="card-header-title">Change Password</span>
       </div>
       <div class="card-body">
-        <form method="post" action="/settings/password">
+        <form method="post" action="/account/password">
           <div class="form-group">
             <label class="form-label" for="f-current_password-1">Current password</label>
             <input id="f-current_password-1" type="password" name="current_password" class="form-input" placeholder="••••••••" required />

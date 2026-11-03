@@ -69,11 +69,11 @@ def rules_page(request: Request, db: Session = Depends(get_db)):
 def create_rule(
     request: Request,
     device_id: int = Form(...),
-    days: list[str] = Form(...),
+    days: list[str] = Form([]),
     start_time: str = Form(...),
     end_time: str = Form(...),
     action: str = Form(...),
-    rate_kbps: int | None = Form(None),
+    rate_kbps: str = Form(""),
     db: Session = Depends(get_db),
 ):
     result = require_admin(request, db)
@@ -90,6 +90,12 @@ def create_rule(
     # Validate action
     if action not in ("BLOCK", "RATE_LIMIT"):
         return RedirectResponse(url="/rules?error=Invalid+action", status_code=302)
+    if not [d for d in days if d in DAYS_OF_WEEK]:
+        return RedirectResponse(url="/rules?error=Tick+at+least+one+day", status_code=302)
+    try:
+        rate_kbps = int(float(rate_kbps)) if rate_kbps.strip() else None      # a browser sends a blank box as ""
+    except ValueError:
+        return RedirectResponse(url="/rules?error=The+speed+must+be+a+number", status_code=302)
     if action == "RATE_LIMIT" and not rate_kbps:
         return RedirectResponse(url="/rules?error=Rate+limit+requires+a+speed+value", status_code=302)
 

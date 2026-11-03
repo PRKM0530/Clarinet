@@ -43,7 +43,7 @@
                 <button class="btn btn-ghost btn-sm btn-icon" title="Acknowledge">Acknowledge</button>
               </form>
               {% endif %}
-              {% if a.status != 'RESOLVED' %}
+              {% if user.is_admin and a.status != 'RESOLVED' %}
               <form method="post" action="/alerts/{{ a.alert_id }}/resolve">
                 <button class="btn btn-success btn-sm btn-icon" title="Resolve">Resolve</button>
               </form>

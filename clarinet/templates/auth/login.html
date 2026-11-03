@@ -6,6 +6,9 @@
   <div class="auth-title">Sign in to Clarinet</div>
   <div class="auth-sub">Enter your credentials to access the dashboard.</div>
 
+  {% if flash %}
+  <div class="flash-bar success" style="margin:0 0 16px" role="status">{{ flash }}</div>
+  {% endif %}
   {% if error %}
   <div class="flash-bar error" style="margin:0 0 16px" role="alert">{{ error }}</div>
   {% endif %}

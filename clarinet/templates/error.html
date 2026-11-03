@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }}{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="auth-logo">Clarinet</div>
+  <div class="auth-title">{{ heading }}</div>
+  <div class="auth-sub">{{ message }}</div>
+  <div style="display:flex;gap:10px;margin-top:20px">
+    <button type="button" class="btn btn-secondary" style="flex:1" onclick="history.back()">Go back</button>
+    <a href="{{ home }}" class="btn btn-primary" style="flex:1;text-align:center">{{ home_label }}</a>
+  </div>
+</div>
+{% endblock %}

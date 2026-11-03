@@ -257,15 +257,18 @@ def voucher_list(request: Request, db: Session = Depends(get_db)):
         "user": user,
         "page": "guest",
         "vouchers": vouchers,
+        "info": request.query_params.get("info", ""),
+        "error": request.query_params.get("error", ""),
     })
 
 
 @router.post("/vouchers/create")
 def create_voucher(
     request: Request,
-    expires_minutes: int = Form(1440),   # default 24 h, minimum 30 min (F-04)
-    data_cap_mb: int | None = Form(None),
-    speed_cap_mbps: float | None = Form(None),
+    expires_hours: str = Form(""),      # what the page sends (1 h, 4 h, 24 h ...)
+    expires_minutes: str = Form(""),    # older callers: minutes
+    data_cap_mb: str = Form(""),        # a browser sends an empty box as ""
+    speed_cap_mbps: str = Form(""),
     label: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
@@ -274,8 +277,21 @@ def create_voucher(
         return result
     user = result
 
+    try:
+        if expires_minutes.strip():
+            minutes = float(expires_minutes)
+        elif expires_hours.strip():
+            minutes = float(expires_hours) * 60
+        else:
+            minutes = 1440                                    # default 24 hours
+        data_cap = int(float(data_cap_mb)) if data_cap_mb.strip() else None
+        speed_cap = float(speed_cap_mbps) if speed_cap_mbps.strip() else None
+    except ValueError:
+        return RedirectResponse(url="/vouchers?error=bad_voucher", status_code=302)
+    if minutes != minutes or (data_cap is not None and data_cap <= 0) or (speed_cap is not None and speed_cap <= 0):
+        return RedirectResponse(url="/vouchers?error=bad_voucher", status_code=302)
     # Validate: minimum 30 minutes (SRS AT-13.1), maximum 30 days
-    expires_minutes = max(30, min(expires_minutes, 43200))
+    expires_minutes = int(max(30, min(minutes, 43200)))
 
     # Generate readable 8-char code (no ambiguous characters)
     alphabet = (string.ascii_uppercase.replace("O", "").replace("I", "")
@@ -286,8 +302,8 @@ def create_voucher(
         code=code,
         created_by=user.member_id,
         expires_at=datetime.utcnow() + timedelta(minutes=expires_minutes),  # naive UTC
-        data_cap_mb=data_cap_mb,
-        speed_cap_mbps=speed_cap_mbps,
+        data_cap_mb=data_cap,
+        speed_cap_mbps=speed_cap,
         status="UNUSED",
     )
     db.add(voucher)

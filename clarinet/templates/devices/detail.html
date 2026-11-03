@@ -43,7 +43,7 @@
     </div>
     <!-- Edit label -->
     <div class="card-footer">
-      <form method="post" action="/devices/{{ device.device_id }}/label" style="display:flex;gap:8px;width:100%">
+      <form method="post" action="/devices/{{ device.device_id }}/rename" style="display:flex;gap:8px;width:100%">
         <input aria-label="Set a label…" type="text" name="label" class="form-input" value="{{ device.label or '' }}" placeholder="Set a label…" />
         <button type="submit" class="btn btn-secondary">Save</button>
       </form>
@@ -139,13 +139,19 @@
     <button class="btn btn-secondary">Mark as guest</button>
   </form>
   {% endif %}
+  {% if user.is_admin %}
   {% if device.state != 'BLOCKED' %}
   <form method="post" action="/devices/{{ device.device_id }}/block"
         onsubmit="return confirm('Block this device?')">
     <button class="btn btn-danger">Block Device</button>
   </form>
+  {% else %}
+  <form method="post" action="/devices/{{ device.device_id }}/unblock"
+        onsubmit="return confirm('Let this device back onto the network?')">
+    <button class="btn btn-success">Unblock Device</button>
+  </form>
   {% endif %}
-  {% if device.state != 'APPROVED' %}
+  {% if device.state != 'APPROVED' and device.state != 'BLOCKED' %}
   <form method="post" action="/devices/{{ device.device_id }}/approve">
     <button class="btn btn-success">Approve Device</button>
   </form>
@@ -153,5 +159,6 @@
   <a href="/rules?device={{ device.device_id }}" class="btn btn-secondary">
     Add Time Rule
   </a>
+  {% endif %}
 </div>
 {% endblock %}
