@@ -92,8 +92,8 @@ def test_locked_account_refuses_correct_password():
         user, err = attempt_login(req, db, "admin", "Admin@secure1")
 
     assert user is None
-    assert err is not None
-    assert "locked" in err.lower() or "minute" in err.lower()
+    # The message is the same as for a wrong password, so it does not reveal that the account exists.
+    assert err == "Invalid username or password."
 
 
 def test_expired_lockout_allows_login():

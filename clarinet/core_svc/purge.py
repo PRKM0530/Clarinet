@@ -96,7 +96,7 @@ def purge_device(db: Session, device_id: int) -> bool:
 # Tables that are configuration or accountability, not collected network data.
 KEEP_TABLES = {
     "member", "settings", "audit_log", "login_attempt", "setup_progress",
-    "trusted_access_point", "known_network",
+    "trusted_access_point", "known_network", "active_session",       # logins survive a data purge
 }
 
 

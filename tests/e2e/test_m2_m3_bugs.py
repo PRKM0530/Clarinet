@@ -112,7 +112,7 @@ def test_s24_revoke_audit_records_the_previous_status(world):
         assert "UNUSED" in str(row.detail) and "REVOKED" not in str(row.detail), row.detail
 
 
-def test_s07_redeeming_does_not_demote_an_approved_device(world):
+def test_s07_redeeming_does_not_demote_an_approved_device(world, trusted_proxy):
     from clarinet.database import SessionLocal
     from clarinet.models import Device
     code = _voucher_code()
@@ -122,7 +122,7 @@ def test_s07_redeeming_does_not_demote_an_approved_device(world):
         assert db.get(Device, world["d_alice"]).state == "APPROVED"
 
 
-def test_s07_voucher_is_not_consumed_when_no_device_can_be_found(world):
+def test_s07_voucher_is_not_consumed_when_no_device_can_be_found(world, trusted_proxy):
     from clarinet.database import SessionLocal
     from clarinet.models import Voucher
     code = _voucher_code()

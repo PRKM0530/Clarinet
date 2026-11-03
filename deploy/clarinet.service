@@ -13,6 +13,9 @@ WorkingDirectory=/opt/clarinet
 AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
 CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
 
+# The site is served over HTTPS by Caddy, so the session cookie is HTTPS-only (.env may override)
+Environment=COOKIE_SECURE=true
+
 # Load environment from .env
 EnvironmentFile=/opt/clarinet/.env
 

@@ -155,7 +155,7 @@ def test_adm05_admin_cannot_disable_self_and_can_disable_others():
     assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
 
 
-def test_adm05_reset_password_changes_login_and_clears_lockout():
+def test_adm05_reset_password_changes_login_and_clears_lockout(trusted_proxy):
     ids = seed_world()
     for _ in range(5):
         new_client().post("/login", data={"username": ALICE[0], "password": "bad"}, headers={"X-Forwarded-For": "4.4.4.4"})

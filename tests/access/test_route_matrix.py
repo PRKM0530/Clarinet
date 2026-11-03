@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from tests._support import ADMIN, ALICE, new_client, seed_world
+from tests._support import ADMIN, ALICE, new_client, register_sessions, seed_world
 
 IGNORED = {"/openapi.json", "/api/docs", "/docs/oauth2-redirect", "/static"}
 
@@ -154,6 +154,7 @@ def sessions():
 def _client(sessions, who):
     c = new_client()
     if who != "anon":
+        register_sessions([sessions["admin"], sessions["alice"]])      # the test reseeded the database since the login
         c.cookies.update(sessions[who])
     return c
 

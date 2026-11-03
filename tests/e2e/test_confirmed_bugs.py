@@ -41,7 +41,6 @@ def test_s22_junk_plan_speed_does_not_break_pages(world):
 
 
 # S-12: a member must not see network-wide totals
-@pytest.mark.xfail(strict=True, reason="S-12: /api/v1/status gives members network-wide counts and traffic")
 def test_s12_member_status_is_scoped_to_own_devices(world):
     body = new_client(ALICE).get("/api/v1/status").json()
     assert body["total_devices"] == 1          # alice owns exactly one device

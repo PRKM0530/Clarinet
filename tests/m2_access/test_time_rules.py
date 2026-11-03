@@ -41,7 +41,15 @@ class TestRuleRoutes:
 
     def test_create_block_rule(self, admin_client):
         from clarinet.database import SessionLocal
-        from clarinet.models import Device, TimeRule
+        from clarinet.models import Device, Settings, TimeRule
+        # Time rules only work in Full Control mode, so the app must be in it for a rule to be created
+        with SessionLocal() as db:
+            mode = db.get(Settings, "network_mode")
+            if mode is None:
+                db.add(Settings(key="network_mode", value="FULL"))
+            else:
+                mode.value = "FULL"
+            db.commit()
         # Create a test device
         with SessionLocal() as db:
             dev = Device(mac_address="aa:bb:cc:11:22:33", state="APPROVED", label="RuleTestDevice")

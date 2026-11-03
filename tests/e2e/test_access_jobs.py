@@ -89,7 +89,6 @@ def test_s05_something_in_the_app_updates_bytes_used():
 
 
 # S-14: background polling must not keep an idle session alive
-@pytest.mark.xfail(strict=True, reason="S-14: the 60-second status poll resets the idle clock, so the timeout never fires")
 def test_s14_polling_does_not_extend_the_session(world, monkeypatch):
     from clarinet import auth
     from clarinet.config import settings
@@ -98,9 +97,24 @@ def test_s14_polling_does_not_extend_the_session(world, monkeypatch):
     monkeypatch.setattr(settings, "SESSION_IDLE_MINUTES", 1)
     c = new_client(ALICE)
     clock["t"] += 50
-    assert c.get("/api/status/topbar").status_code == 200          # what the open tab does every 60 s
+    # what the open tab does every 60 s (the page's JavaScript marks it as a background poll)
+    assert c.get("/api/status/topbar", headers={"X-Clarinet-Poll": "1"}).status_code == 200
     clock["t"] += 50                                                # 100 s after login, user did nothing
-    assert c.get("/dashboard").status_code == 302
+    r = c.get("/dashboard")
+    assert r.status_code == 302 and "reason=timeout" in r.headers["location"]
+
+
+def test_s14_real_activity_does_keep_the_session_alive(world, monkeypatch):
+    from clarinet import auth
+    from clarinet.config import settings
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(auth, "time", SimpleNamespace(time=lambda: clock["t"]))
+    monkeypatch.setattr(settings, "SESSION_IDLE_MINUTES", 1)
+    c = new_client(ALICE)
+    clock["t"] += 50
+    assert c.get("/devices").status_code == 200                     # the user clicks something
+    clock["t"] += 50
+    assert c.get("/dashboard").status_code == 200                   # 100 s after login but only 50 s idle
 
 
 def test_s14_a_truly_idle_session_does_time_out(world, monkeypatch):

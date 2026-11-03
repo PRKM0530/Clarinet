@@ -118,9 +118,28 @@ app.add_middleware(
     secret_key=settings.SECRET_KEY,
     session_cookie="clarinet_session",
     max_age=settings.SESSION_IDLE_MINUTES * 60,
-    https_only=False,   # set True behind Caddy HTTPS in production
+    https_only=settings.COOKIE_SECURE,   # true when served over HTTPS (the install script's service sets it)
     same_site="lax",
 )
+
+# Refuse state-changing requests that a browser says came from another site (CSRF). The session cookie is
+# SameSite=Lax, which already stops most cross-site POSTs; this checks the Origin header as a second layer.
+from urllib.parse import urlparse
+from fastapi import Request
+from fastapi.responses import PlainTextResponse
+
+
+@app.middleware("http")
+async def refuse_cross_site_posts(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site")
+        if fetch_site == "cross-site" or (
+            origin is not None and urlparse(origin).netloc != request.headers.get("host", "")
+        ):
+            return PlainTextResponse("Cross-site request refused.", status_code=403)
+    return await call_next(request)
+
 
 # Serve Bootstrap 5, Bootstrap Icons, Chart.js from /static/
 STATIC_DIR.mkdir(exist_ok=True)

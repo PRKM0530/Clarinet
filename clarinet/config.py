@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     SLOWDOWN_SPEED_THRESHOLD: float = 0.70
     ALERT_LOCKOUT_ATTEMPTS: int = 5
     ALERT_LOCKOUT_MINUTES: int = 5
+    # Addresses of reverse proxies (for example Caddy) whose X-Forwarded-For header may be believed
+    TRUSTED_PROXIES: str = "127.0.0.1,::1"
+    # Send the session cookie only over HTTPS (set true when serving through Caddy)
+    COOKIE_SECURE: bool = False
     SESSION_IDLE_MINUTES: int = 30
 
     model_config = {"env_file": BASE_DIR / ".env", "extra": "ignore"}

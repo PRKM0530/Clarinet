@@ -81,6 +81,12 @@ def create_rule(
         return result
     user = result
 
+    # Rules only act in Full Control mode, so creating one elsewhere would silently do nothing
+    from clarinet.app_settings import get_setting
+    from clarinet.core_svc.mode import can_enforce, parse_mode
+    if not can_enforce(parse_mode(get_setting(db, "network_mode"))):
+        return RedirectResponse(url="/rules?error=Time+rules+need+Full+Control+mode", status_code=302)
+
     # Validate action
     if action not in ("BLOCK", "RATE_LIMIT"):
         return RedirectResponse(url="/rules?error=Invalid+action", status_code=302)

@@ -250,6 +250,9 @@ def toggle_member(member_id: int, request: Request, db: Session = Depends(get_db
         audit(db, user.member_id, "TOGGLE_MEMBER", "Member", member_id,
               {"active": member.is_active})
         db.commit()
+        if not member.is_active:
+            from clarinet.auth import end_sessions
+            end_sessions(db, member_id)
     return RedirectResponse(url="/settings", status_code=302)
 
 
@@ -277,4 +280,6 @@ def reset_password(
         member.locked_until = None
         audit(db, user.member_id, "RESET_PASSWORD", "Member", member_id)
         db.commit()
+        from clarinet.auth import end_sessions
+        end_sessions(db, member_id)
     return RedirectResponse(url="/settings?info=password_reset", status_code=302)

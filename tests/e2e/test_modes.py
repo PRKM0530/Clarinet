@@ -38,7 +38,6 @@ def test_mod01_speed_test_is_refused_in_public_mode_only():
 RULE = {"device_id": "{d_alice}", "days": "mon", "start_time": "22:00", "end_time": "23:00", "action": "BLOCK"}
 
 
-@pytest.mark.xfail(strict=True, reason="S-08: POST /rules/create is not gated by network mode")
 @pytest.mark.parametrize("mode", ["MONITOR", "PUBLIC"])
 def test_mod01_time_rules_cannot_be_created_outside_full_mode(mode):
     ids = seed_world(mode)

@@ -38,10 +38,8 @@ _ATTEMPT_WINDOW_MINUTES = 10
 # ──────────────────────────────────────────────
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    from clarinet.auth import client_ip
+    return client_ip(request)             # X-Forwarded-For is only believed from a trusted proxy
 
 
 def _is_rate_limited(ip: str, db: Session) -> bool:
@@ -138,27 +136,36 @@ def _activate_voucher(voucher: Voucher, mac: str | None, db: Session) -> None:
                 speed_cap_mbps=voucher.speed_cap_mbps,
             ))
 
-        # Open nft guest access
+
+def _open_voucher_access(voucher: Voucher, mac: str | None, db: Session) -> None:
+    """
+    Open the network for a voucher holder. Called AFTER the database change is saved: the reconcile job removes
+    access rules for anyone the database does not (yet) list as a guest, so changing the network first could
+    have the new rule deleted a moment later.
+    """
+    if not mac:
+        return
+    # Open nft guest access
+    try:
+        from clarinet.app_settings import get_setting as _gs
+        from clarinet.enforcer.nft_wrapper import open_guest_access
+        open_guest_access(mac, interface=_gs(db, "network_interface", ""))
+    except Exception:
+        pass
+
+    # Apply speed cap if configured
+    if voucher.speed_cap_mbps:
         try:
-            from clarinet.app_settings import get_setting as _gs
-            from clarinet.enforcer.nft_wrapper import open_guest_access
-            open_guest_access(mac, interface=_gs(db, "network_interface", ""))
+            from clarinet.database import SessionLocal as SL
+            from clarinet.app_settings import get_setting
+            from clarinet.enforcer.tc_wrapper import set_rate_limit
+            with SL() as _db:
+                iface = get_setting(_db, "guest.interface",
+                                    get_setting(_db, "network_interface", ""))
+            if iface:
+                set_rate_limit(iface, mac, int(voucher.speed_cap_mbps * 1000))
         except Exception:
             pass
-
-        # Apply speed cap if configured
-        if voucher.speed_cap_mbps:
-            try:
-                from clarinet.database import SessionLocal as SL
-                from clarinet.app_settings import get_setting
-                from clarinet.enforcer.tc_wrapper import set_rate_limit
-                with SL() as _db:
-                    iface = get_setting(_db, "guest.interface",
-                                        get_setting(_db, "network_interface", ""))
-                if iface:
-                    set_rate_limit(iface, mac, int(voucher.speed_cap_mbps * 1000))
-            except Exception:
-                pass
 
 
 # ──────────────────────────────────────────────
@@ -224,6 +231,7 @@ def redeem_voucher(
     _activate_voucher(voucher, mac, db)
     _log_attempt(ip, code, True, db)
     db.commit()
+    _open_voucher_access(voucher, mac, db)
 
     return templates.TemplateResponse("guest/success.html", {
         "request": request,

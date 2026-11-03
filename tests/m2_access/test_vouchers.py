@@ -72,7 +72,7 @@ class TestVoucherCreation:
 
 
 class TestVoucherRedemption:
-    def test_valid_code_returns_success_page(self, client, admin_client):
+    def test_valid_code_returns_success_page(self, client, admin_client, trusted_proxy):
         # The guest must be a device the scanner has seen: a voucher is not used up for an unknown device.
         from clarinet.database import SessionLocal
         from clarinet.models import Device

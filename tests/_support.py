@@ -41,6 +41,13 @@ def no_real_network(monkeypatch):
     yield
 
 
+@pytest.fixture()
+def trusted_proxy(monkeypatch):
+    """Treat the test client as a reverse proxy, so its X-Forwarded-For header is believed."""
+    from clarinet.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1,::1,testclient")
+
+
 def reset_db():
     from clarinet.database import Base, engine
     import clarinet.models  # noqa: F401
@@ -98,6 +105,22 @@ def seed_world(mode: str = "FULL") -> dict:
         db.commit()
         return {"boss": boss.member_id, "alice": alice.member_id, "bob": bob.member_id,
                 "d_alice": d1.device_id, "d_bob": d2.device_id, "d_new": d3.device_id, "d_free": d4.device_id}
+
+
+def register_sessions(cookie_jars) -> None:
+    """Re-create the server-side rows for logins made earlier (reseeding the database wipes them)."""
+    import base64, json
+    from clarinet.database import SessionLocal
+    from clarinet.models.sessions import ActiveSession
+    with SessionLocal() as db:
+        for jar in cookie_jars:
+            raw = jar.get("clarinet_session")
+            if not raw:
+                continue
+            data = json.loads(base64.b64decode(raw.split(".")[0] + "=="))
+            if not db.get(ActiveSession, data["sid"]):
+                db.add(ActiveSession(sid=data["sid"], member_id=data["user_id"]))
+        db.commit()
 
 
 def new_client(identity: tuple[str, str] | None = None, **kw) -> TestClient:

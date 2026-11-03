@@ -72,7 +72,7 @@ function setBadge(href, count, extraClass) {
 }
 
 function loadStatus() {
-  fetch('/api/status/topbar', { credentials: 'same-origin' })
+  fetch('/api/status/topbar', { credentials: 'same-origin', headers: { 'X-Clarinet-Poll': '1' } })
     .then(r => (r.ok ? r.json() : null))
     .then(s => {
       if (!s) return;

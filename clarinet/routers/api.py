@@ -46,22 +46,29 @@ def api_status(request: Request, db: Session = Depends(get_db)):
     if err:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    total_devices  = db.query(func.count(Device.device_id)).scalar() or 0
+    # A member sees only their own devices, their own devices' alerts and their own traffic
+    from clarinet.core_svc.permissions import member_device_ids, visible_alerts
     from clarinet.core_svc.presence import online_cutoff
-    online_devices = db.query(func.count(Device.device_id)).filter(
-        Device.last_seen >= online_cutoff(), Device.state != "BLOCKED").scalar() or 0
-    new_devices    = db.query(func.count(Device.device_id)).filter(Device.state == "NEW").scalar() or 0
-    open_alerts    = db.query(func.count(Alert.alert_id)).filter(Alert.status == "OPEN").scalar() or 0
-    critical_alerts = db.query(func.count(Alert.alert_id)).filter(
-        Alert.status == "OPEN", Alert.level == "CRITICAL"
-    ).scalar() or 0
+    own_ids = None if user.is_admin else member_device_ids(db, user)
+
+    def devices():
+        q = db.query(func.count(Device.device_id))
+        return q if own_ids is None else q.filter(Device.device_id.in_(own_ids))
+
+    total_devices = devices().scalar() or 0
+    online_devices = devices().filter(Device.last_seen >= online_cutoff(), Device.state != "BLOCKED").scalar() or 0
+    new_devices = devices().filter(Device.state == "NEW").scalar() or 0
+    alerts = visible_alerts(db, user).filter(Alert.status == "OPEN")
+    open_alerts = alerts.count()
+    critical_alerts = alerts.filter(Alert.level == "CRITICAL").count()
 
     active_slowdown = db.query(SlowdownEvent).filter(SlowdownEvent.ended_at == None).first()
 
     today = date.today().isoformat()
-    today_bytes = db.query(
-        func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out)
-    ).filter(UsageRecord.date == today).scalar() or 0
+    traffic = db.query(func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out)).filter(UsageRecord.date == today)
+    if own_ids is not None:
+        traffic = traffic.filter(UsageRecord.device_id.in_(own_ids))
+    today_bytes = traffic.scalar() or 0
 
     from clarinet.core_svc.speed_filters import valid_only
     latest_speed = valid_only(db.query(SpeedTestResult)).order_by(SpeedTestResult.tested_at.desc()).first()

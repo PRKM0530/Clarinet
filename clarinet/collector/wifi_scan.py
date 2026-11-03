@@ -165,10 +165,31 @@ def _is_open(security: str | None) -> bool:
     return security is None or security.strip().lower() in ("", "open", "none", "--")
 
 
-def judge(sighting: Sighting, trusted: list[tuple[str, str]]) -> tuple[str, str | None, str]:
+def _same_network_node(sighting: Sighting, trusted: list[tuple[str, str]], trusted_security: dict[str, str | None]) -> bool:
+    """
+    True if this looks like another access point of a trusted network: the same name, the same kind of
+    security, and the same hardware maker (first three bytes of the address) as a trusted access point.
+    Campuses, offices and mesh systems have many such access points; an impostor with a different maker,
+    or one that is open when the real network is secured, is not matched.
+    """
+    if _is_open(sighting.security):
+        return False
+    oui = sighting.bssid.upper()[:8]
+    for ssid, bssid in trusted:
+        if ssid.casefold() != sighting.ssid.casefold() or bssid.upper()[:8] != oui:
+            continue
+        known = trusted_security.get(bssid.upper())
+        if known is not None and (known or "").strip().lower() == (sighting.security or "").strip().lower():
+            return True
+    return False
+
+
+def judge(sighting: Sighting, trusted: list[tuple[str, str]],
+          trusted_security: dict[str, str | None] | None = None) -> tuple[str, str | None, str]:
     """
     Decide what an access point is.
-    `trusted` is a list of (ssid, bssid) pairs.
+    `trusted` is a list of (ssid, bssid) pairs; `trusted_security` maps a trusted BSSID to its security type
+    (when known) so that further access points of the same network are not reported.
     Returns (verdict, reason, level) where verdict is OK / UNKNOWN / SUSPECT.
     """
     if not sighting.ssid:
@@ -180,6 +201,8 @@ def judge(sighting: Sighting, trusted: list[tuple[str, str]]) -> tuple[str, str 
 
     own = {s.casefold() for s, _ in trusted}
     if sighting.ssid.casefold() in own:
+        if trusted_security and _same_network_node(sighting, trusted, trusted_security):
+            return "OK", "Another access point of your network (same name, security and maker)", "INFO"
         weaker = _is_open(sighting.security)
         reason = "Same name as your network but not a trusted access point"
         if weaker:
@@ -222,9 +245,10 @@ def scan_and_evaluate(db) -> dict:
     trusted = [(t.ssid, t.bssid) for t in db.query(TrustedAccessPoint).all()]
     now = datetime.now(timezone.utc)
     summary = {"seen": len(sightings), "suspect": 0, "trusted": len(trusted)}
+    trusted_security = {s.bssid.upper(): s.security for s in sightings if s.bssid.upper() in {b.upper() for _, b in trusted}}
 
     for s in sightings:
-        verdict, reason, level = judge(s, trusted) if trusted else ("UNKNOWN", None, "INFO")
+        verdict, reason, level = judge(s, trusted, trusted_security) if trusted else ("UNKNOWN", None, "INFO")
         row = db.get(SeenAccessPoint, s.bssid)
         if row is None:
             row = SeenAccessPoint(bssid=s.bssid, ssid=s.ssid, first_seen=now)

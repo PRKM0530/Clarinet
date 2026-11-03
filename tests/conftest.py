@@ -15,3 +15,5 @@ os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["APP_ENV"] = "test"
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tests._support import trusted_proxy  # noqa: E402,F401  (fixture shared by every folder)

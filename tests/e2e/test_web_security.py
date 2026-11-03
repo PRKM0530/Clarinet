@@ -54,7 +54,6 @@ def test_acc06_session_cookie_flags(world):
     assert "httponly" in cookie and "samesite=lax" in cookie
 
 
-@pytest.mark.xfail(strict=True, reason="N-01: logout only clears the client's cookie; the signed cookie still works if replayed")
 def test_acc06_cookie_is_dead_after_logout(world):
     c = new_client(ADMIN)
     saved = dict(c.cookies)
@@ -94,10 +93,20 @@ def test_acc05_logout_is_a_get_request_documented(world):
     assert new_client(ADMIN).get("/logout").status_code == 302
 
 
-def test_acc05_post_has_no_csrf_token_so_samesite_is_the_only_defence(world):
-    """Documents the design: a POST carrying only the cookie and a foreign Origin is accepted."""
-    r = new_client(ADMIN).post(f"/devices/{world['d_free']}/rename", data={"label": "x"},
-                               headers={"Origin": "http://evil.example"})
+def test_acc05_post_from_another_site_is_refused(world):
+    admin = new_client(ADMIN)
+    for headers in ({"Origin": "http://evil.example"}, {"Sec-Fetch-Site": "cross-site"}, {"Origin": "null"}):
+        r = admin.post(f"/devices/{world['d_free']}/rename", data={"label": "hacked"}, headers=headers)
+        assert r.status_code == 403, headers
+    from clarinet.database import SessionLocal
+    from clarinet.models import Device
+    with SessionLocal() as db:
+        assert db.get(Device, world["d_free"]).label != "hacked"
+
+
+def test_acc05_post_from_the_same_site_still_works(world):
+    r = new_client(ADMIN).post(f"/devices/{world['d_free']}/rename", data={"label": "mine"},
+                               headers={"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"})
     assert r.status_code == 302 and "info=" in r.headers["location"]
 
 
@@ -113,7 +122,6 @@ def test_adm04_ip_lockout_exists_for_a_single_address(world):
     assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
 
 
-@pytest.mark.xfail(strict=True, reason="S-13: X-Forwarded-For is trusted, so rotating it bypasses the IP lockout")
 def test_s13_rotating_forwarded_for_cannot_bypass_ip_lockout(world):
     for i in range(8):
         _fail(f"ghost{i}", xff=f"1.1.1.{i}")
@@ -121,7 +129,6 @@ def test_s13_rotating_forwarded_for_cannot_bypass_ip_lockout(world):
     assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
 
 
-@pytest.mark.xfail(strict=True, reason="S-13: locked message differs from the unknown-user message, revealing valid usernames")
 def test_s13_locked_account_message_does_not_reveal_username(world):
     for _ in range(5):
         _fail(ALICE[0])
@@ -132,7 +139,6 @@ def test_s13_locked_account_message_does_not_reveal_username(world):
     assert ("temporarily locked" in locked) == ("temporarily locked" in unknown)
 
 
-@pytest.mark.xfail(strict=True, reason="S-13: ALERT_LOCKOUT_* settings are ignored; auth.py uses hard-coded constants")
 def test_s13_lockout_settings_are_honoured(world, monkeypatch):
     from clarinet.config import settings
     monkeypatch.setattr(settings, "ALERT_LOCKOUT_ATTEMPTS", 2)
@@ -151,3 +157,37 @@ def test_s19_online_count_uses_last_seen(world):
             d.last_seen = datetime.now(timezone.utc) - timedelta(days=30)
         db.commit()
     assert new_client(ADMIN).get("/api/v1/status").json()["online_devices"] == 0
+
+
+# Trusted proxies and server-side sessions
+def test_x_forwarded_for_is_only_believed_from_a_trusted_proxy(monkeypatch):
+    from types import SimpleNamespace
+    from clarinet.auth import client_ip
+    from clarinet.config import settings
+
+    def request(peer, forwarded):
+        return SimpleNamespace(client=SimpleNamespace(host=peer), headers={"X-Forwarded-For": forwarded} if forwarded else {})
+
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1,::1")
+    assert client_ip(request("203.0.113.9", "1.2.3.4")) == "203.0.113.9"                 # not a proxy: header ignored
+    assert client_ip(request("127.0.0.1", "198.51.100.7")) == "198.51.100.7"            # Caddy on this machine
+    assert client_ip(request("127.0.0.1", "6.6.6.6, 198.51.100.7")) == "198.51.100.7"   # client-supplied entries are ignored
+    assert client_ip(request("127.0.0.1", None)) == "127.0.0.1"
+
+
+def test_resetting_a_password_logs_the_member_out_everywhere(world):
+    alice = new_client(ALICE)
+    assert alice.get("/dashboard").status_code == 200
+    new_client(ADMIN).post(f"/settings/members/{world['alice']}/reset-password", data={"new_password": "another-pw-12345"})
+    assert alice.get("/dashboard").status_code == 302
+
+
+def test_login_is_recorded_and_logout_removes_the_record(world):
+    from clarinet.database import SessionLocal
+    from clarinet.models.sessions import ActiveSession
+    c = new_client(ALICE)
+    with SessionLocal() as db:
+        assert db.query(ActiveSession).filter_by(member_id=world["alice"]).count() == 1
+    c.get("/logout")
+    with SessionLocal() as db:
+        assert db.query(ActiveSession).filter_by(member_id=world["alice"]).count() == 0

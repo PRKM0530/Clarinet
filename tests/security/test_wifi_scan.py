@@ -106,9 +106,11 @@ def test_scan_and_evaluate_raises_one_alert_for_a_fake_ap(db, monkeypatch):
     summary = wifi_scan.scan_and_evaluate(db)
     wifi_scan.scan_and_evaluate(db)          # second scan must not duplicate the alert
 
-    assert summary["suspect"] == 2           # the open clone and the unapproved second radio
+    # Only the open clone is reported. The second radio has the same name, security and maker as the trusted
+    # access point, so it is treated as another access point of the same network (see test_wifi_roaming.py).
+    assert summary["suspect"] == 1
     titles = [a.title for a in db.query(Alert).filter(Alert.type == "FAKE_AP")]
-    assert len(titles) == len(set(titles)) == 2
+    assert len(titles) == len(set(titles)) == 1
     assert db.get(SeenAccessPoint, "11:22:33:44:55:66").verdict == "SUSPECT"
     assert db.get(SeenAccessPoint, "AA:BB:CC:DD:EE:01").verdict == "OK"
 
