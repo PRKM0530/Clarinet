@@ -262,3 +262,23 @@ def test_s08_repeated_cycles_do_not_pile_up_rules(world):
     for _ in range(10):
         apply_time_rules()
     assert nft_ruleset().count(world["mac_a"]) <= 4
+
+
+# E3: the active ARP scan finds hosts the router has never talked to
+def test_e3_active_scan_finds_devices_the_neighbour_table_does_not_know(world):
+    from clarinet.app_settings import set_setting
+    from clarinet.collector import arp_scanner
+    from clarinet.database import SessionLocal
+    from clarinet.models import Device
+    sh("ip", "neigh", "flush", "all")                         # the router knows nobody now
+    arp_scanner.set_source(arp_scanner._default_source)      # the plain neighbour table, as in the running app
+    attacker = mac_of("attacker").upper()
+    with SessionLocal() as db:
+        set_setting(db, "active_discovery", "off")
+        arp_scanner.scan_once(db, IFACE)
+        assert db.query(Device).filter(Device.mac_address == attacker).first() is None, "passive scan should not know it yet"
+        sh("ip", "neigh", "flush", "all")
+        set_setting(db, "active_discovery", "on")
+        arp_scanner.scan_once(db, IFACE)
+        found = db.query(Device).filter(Device.mac_address == attacker).first()
+        assert found is not None and found.ip_address == "10.77.0.66", "the active scan did not find a silent device"
