@@ -8,21 +8,22 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 
-def local_now(tz_name: str = "Asia/Kolkata") -> datetime:
+def local_now(tz_name: str = "") -> datetime:
+    from clarinet.core_svc.localtime import machine_zone
     try:
-        tz = ZoneInfo(tz_name)
+        tz = ZoneInfo(tz_name or machine_zone())
     except Exception:
-        tz = ZoneInfo("Asia/Kolkata")
+        tz = ZoneInfo("UTC")
     return datetime.now(tz)
 
 
 def get_tz(db) -> ZoneInfo:
     try:
         from clarinet.app_settings import get_setting
-        name = get_setting(db, "timezone", "Asia/Kolkata")
-        return ZoneInfo(name)
+        from clarinet.core_svc.localtime import machine_zone
+        return ZoneInfo(get_setting(db, "timezone", "") or machine_zone())
     except Exception:
-        return ZoneInfo("Asia/Kolkata")
+        return ZoneInfo("UTC")
 
 
 def ensure_utc(dt: datetime | None) -> datetime | None:

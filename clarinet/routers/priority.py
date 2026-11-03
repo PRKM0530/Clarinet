@@ -14,6 +14,7 @@ Fixes (F-07):
 """
 from __future__ import annotations
 
+from clarinet.core_svc.localtime import configured_zone
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -60,7 +61,7 @@ def _fairness_credit_today(db, member_id: int) -> int:
         from clarinet.models.guest import FairnessCredit
         from clarinet.app_settings import get_setting
         from zoneinfo import ZoneInfo
-        tz = ZoneInfo(get_setting(db, "timezone", "Asia/Kolkata"))
+        tz = ZoneInfo(configured_zone(db))
         today = datetime.now(tz).strftime("%Y-%m-%d")
         credit = (
             db.query(FairnessCredit)

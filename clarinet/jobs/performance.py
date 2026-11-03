@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timezone
 
 from apscheduler.triggers.cron import CronTrigger
+from clarinet.core_svc.localtime import zone_name
 from apscheduler.triggers.interval import IntervalTrigger
 
 log = logging.getLogger("clarinet.jobs.performance")
@@ -53,11 +54,11 @@ def register(scheduler) -> None:
         next_run_time=datetime.now(timezone.utc),
     )
 
-    # Rebuild baselines at 03:00 IST (= 21:30 UTC previous day)
+    # Rebuild baselines at 03:00 local time
     # F-14 fix: use local timezone (Asia/Kolkata)
     scheduler.add_job(
         rebuild_baselines,
-        trigger=CronTrigger(hour=3, minute=0, timezone="Asia/Kolkata"),
+        trigger=CronTrigger(hour=3, minute=0, timezone=zone_name()),
         id="rebuild_baselines",
         replace_existing=True,
         coalesce=True,
@@ -67,7 +68,7 @@ def register(scheduler) -> None:
     # Retention: clean up old ping records (keep 30 days)
     scheduler.add_job(
         retention,
-        trigger=CronTrigger(hour=2, minute=30, timezone="Asia/Kolkata"),
+        trigger=CronTrigger(hour=2, minute=30, timezone=zone_name()),
         id="perf_retention",
         replace_existing=True,
         coalesce=True,

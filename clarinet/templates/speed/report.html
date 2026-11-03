@@ -14,8 +14,8 @@
 <div class="document">
   <h2>Internet speed report</h2>
   <p class="muted">
-    {{ report.start.strftime('%d %b %Y') }} to {{ report.end.strftime('%d %b %Y') }}
-    &middot; created {{ generated.strftime('%d %b %Y %H:%M') }} UTC
+    {{ report.start|local('%d %b %Y') }} to {{ report.end|local('%d %b %Y') }}
+    &middot; created {{ generated|local('%d %b %Y %H:%M') }} UTC
   </p>
 
   <table class="facts">
@@ -38,7 +38,7 @@
       {% for t in report.tests %}
       {% set pct = report.pct_of_plan(t) %}
       <tr>
-        <td>{{ t.tested_at.strftime('%d %b %Y %H:%M') }}</td>
+        <td>{{ t.tested_at|local('%d %b %Y %H:%M') }}</td>
         <td class="num">{{ t.download_mbps|round(1) }} Mbps</td>
         <td class="num {{ 'text-bad' if pct is not none and pct < report.threshold_pct else '' }}">{{ pct if pct is not none else '-' }}{{ '%' if pct is not none }}</td>
         <td class="num">{{ t.upload_mbps|round(1) }} Mbps</td>

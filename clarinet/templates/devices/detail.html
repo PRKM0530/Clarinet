@@ -32,8 +32,8 @@
       {{ row('Hostname', device.hostname or '—') }}
       {{ row('Vendor', device.vendor or '—') }}
       {{ row('Owner', device.owner.username if device.owner else '—') }}
-      {{ row('First seen', device.first_seen.strftime('%d %b %Y %H:%M')) }}
-      {{ row('Last seen', device.last_seen.strftime('%d %b %Y %H:%M')) }}
+      {{ row('First seen', device.first_seen|local('%d %b %Y %H:%M')) }}
+      {{ row('Last seen', device.last_seen|local('%d %b %Y %H:%M')) }}
       <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px">
         <span style="color:var(--text-3)">Randomised MAC</span>
         <span class="badge {{ 'badge-yellow' if device.is_random_mac else 'badge-green' }}">
@@ -66,7 +66,7 @@
               {{ 'Connected' if h.event == 'JOIN' else 'Disconnected' }}
             </div>
             <div style="font-size:12px;color:var(--text-3)">
-              {{ h.timestamp.strftime('%d %b %H:%M') }}
+              {{ h.timestamp|local('%d %b %H:%M') }}
               {% if h.ip_address %} · {{ h.ip_address }}{% endif %}
             </div>
           </div>

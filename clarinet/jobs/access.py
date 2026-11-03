@@ -10,6 +10,7 @@ Fixes (F-02, F-03):
 """
 from __future__ import annotations
 
+from clarinet.core_svc.localtime import configured_zone
 import logging
 from datetime import datetime, timezone
 
@@ -277,7 +278,7 @@ def _record_fairness_used(db, member_id: int, minutes: int) -> None:
         from zoneinfo import ZoneInfo
         from datetime import datetime
 
-        tz_name = get_setting(db, "timezone", "Asia/Kolkata")
+        tz_name = configured_zone(db)
         tz = ZoneInfo(tz_name)
         today = datetime.now(tz).strftime("%Y-%m-%d")
 

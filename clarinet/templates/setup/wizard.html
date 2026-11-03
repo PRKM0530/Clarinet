@@ -68,6 +68,38 @@
     <div style="margin-bottom:28px">
       <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
         <span style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">3</span>
+        Your network
+      </div>
+      <div class="form-row">
+        <div>
+          <label class="form-label" for="f-network_interface-1">Network interface</label>
+          {% if interfaces %}
+          <select id="f-network_interface-1" name="network_interface" class="form-select">
+            {% for i in interfaces %}<option value="{{ i }}"{{ ' selected' if (form.network_interface if form is defined else default_interface) == i else '' }}>{{ i }}</option>{% endfor %}
+          </select>
+          {% else %}
+          <input id="f-network_interface-1" type="text" name="network_interface" class="form-input" placeholder="eth0" />
+          {% endif %}
+          <div class="form-hint">The connection to your router. Clarinet watches the devices on it.</div>
+        </div>
+        <div>
+          <label class="form-label" for="f-router_ip-1">Router address (optional)</label>
+          <input id="f-router_ip-1" type="text" name="router_ip" class="form-input" value="{{ form.router_ip if form is defined else default_gateway }}" placeholder="192.168.1.1" />
+          <div class="form-hint">Used to tell a slow router from a slow internet connection.</div>
+        </div>
+        <div>
+          <label class="form-label" for="f-timezone-1">Time zone</label>
+          <select id="f-timezone-1" name="timezone" class="form-select">
+            {% for z in zones %}<option value="{{ z }}"{{ ' selected' if (form.timezone if form is defined else machine_zone) == z else '' }}>{{ z }}</option>{% endfor %}
+          </select>
+          <div class="form-hint">Times on every page, and time rules such as 22:00, use this zone.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:28px">
+      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+        <span style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">4</span>
         ISP plan (used for slowdown detection)
       </div>
       <div class="form-row">

@@ -48,6 +48,9 @@ def _page_context(request):
 
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
+from clarinet.core_svc.localtime import local_filter as _local_filter, zone_name as _zone_name  # noqa: E402
+templates.env.filters["local"] = _local_filter
+templates.env.globals["local_zone"] = _zone_name
 
 
 def _size(num_bytes) -> str:

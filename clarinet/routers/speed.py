@@ -10,6 +10,7 @@ Added (M2):
 """
 from __future__ import annotations
 
+from clarinet.core_svc.localtime import configured_zone
 import csv
 import io
 from datetime import datetime, timezone
@@ -48,7 +49,8 @@ def speed_page(request: Request, db: Session = Depends(get_db)):
     )
     latest = results[0] if results else None
 
-    chart_labels = [r.tested_at.strftime("%d %b %H:%M") for r in reversed(results[:30])]
+    from clarinet.core_svc.localtime import local_filter
+    chart_labels = [local_filter(r.tested_at) for r in reversed(results[:30])]
     chart_dl = [r.download_mbps for r in reversed(results[:30])]
     chart_ul = [r.upload_mbps for r in reversed(results[:30])]
     chart_lat = [r.latency_ms for r in reversed(results[:30])]
@@ -68,6 +70,7 @@ def speed_page(request: Request, db: Session = Depends(get_db)):
         "chart_lat": chart_lat,
         "mode": mode,
         "test_running": is_running(),
+        "latest_failed": bool(latest and latest.server_host == "failed"),
         "error": request.query_params.get("error"),
         "info": request.query_params.get("info"),
     })
@@ -101,7 +104,7 @@ def export_speed_csv(request: Request, db: Session = Depends(get_db)):
 
     from clarinet.app_settings import get_setting
     from zoneinfo import ZoneInfo
-    tz = ZoneInfo(get_setting(db, "timezone", "Asia/Kolkata"))
+    tz = ZoneInfo(configured_zone(db))
 
     results = db.query(SpeedTestResult).order_by(SpeedTestResult.tested_at.asc()).all()
 

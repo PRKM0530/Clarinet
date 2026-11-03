@@ -34,6 +34,15 @@ def _set(db: Session, key: str, value: str) -> None:
         db.add(AppSettings(key=key, value=value))
 
 
+def _wizard_extras() -> dict:
+    """What the wizard offers for the network step: this machine's interfaces, router and time zone."""
+    from clarinet.core_svc import netinfo
+    from clarinet.core_svc.localtime import common_zones, machine_zone
+    interfaces = netinfo.list_interfaces()
+    return {"interfaces": interfaces, "default_interface": interfaces[0] if interfaces else "",
+            "default_gateway": netinfo.detect_gateway() or "", "zones": common_zones(), "machine_zone": machine_zone()}
+
+
 # GET /setup
 
 @router.get("", response_class=HTMLResponse)
@@ -44,6 +53,7 @@ def wizard_page(request: Request, db: Session = Depends(get_db)):
         "request": request,
         "step": 1,
         "error": None,
+        **_wizard_extras(),
     })
 
 
@@ -60,6 +70,9 @@ def wizard_create_admin(
     plan_upload: float = Form(20.0),
     billing_day: int = Form(1),
     monthly_limit_gb: str = Form(""),
+    network_interface: str = Form(""),
+    router_ip: str = Form(""),
+    timezone: str = Form(""),
     consent: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -86,6 +99,20 @@ def wizard_create_admin(
     if consent != "yes":
         errors.append("Please confirm that you are allowed to monitor this network.")
 
+    from clarinet.core_svc import netinfo
+    from clarinet.core_svc.localtime import machine_zone, valid_zone
+    import ipaddress
+    network_interface, router_ip, timezone = network_interface.strip(), router_ip.strip(), timezone.strip() or machine_zone()
+    if network_interface and not netinfo.interface_name_ok(network_interface):
+        errors.append("That network interface name is not valid.")
+    if router_ip:
+        try:
+            ipaddress.ip_address(router_ip)
+        except ValueError:
+            errors.append("The router address must be an IP address such as 192.168.1.1, or left empty.")
+    if not valid_zone(timezone):
+        errors.append("Choose a time zone from the list.")
+
     limit_bytes = ""
     if monthly_limit_gb.strip():
         try:
@@ -107,8 +134,12 @@ def wizard_create_admin(
             "request": request,
             "step": 1,
             "error": " ".join(errors),
+            **_wizard_extras(),
             "form": {
                 "username": username,
+                "network_interface": network_interface,
+                "router_ip": router_ip,
+                "timezone": timezone,
                 "network_mode": network_mode,
                 "plan_download": plan_download,
                 "plan_upload": plan_upload,
@@ -131,6 +162,10 @@ def wizard_create_admin(
     _set(db, "plan_download_mbps", str(plan_download))
     _set(db, "plan_upload_mbps", str(plan_upload))
     _set(db, "billing_day", str(billing_day))
+    if network_interface:
+        _set(db, "network_interface", network_interface)
+    _set(db, "router_ip", router_ip)
+    _set(db, "timezone", timezone)
     if limit_bytes:
         _set(db, "limit.bytes", limit_bytes)
     _set(db, "setup_complete", "true")

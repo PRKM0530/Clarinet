@@ -69,7 +69,7 @@
     <div style="font-size:14px;font-weight:600;color:var(--red)">Slowdown detected</div>
     <div style="font-size:13px;color:var(--text-2);margin-top:2px">
       {{ active_slowdown.causes[0].cause.replace('_',' ').title() if active_slowdown.causes else 'Diagnosing…' }}
-      — since {{ active_slowdown.started_at.strftime('%H:%M') if active_slowdown.started_at else '' }}
+      — since {{ active_slowdown.started_at|local('%H:%M') if active_slowdown.started_at else '' }}
     </div>
   </div>
   {% if user.is_admin %}<a href="/slowdowns" class="btn btn-danger btn-sm" style="margin-left:auto">View details</a>{% endif %}
@@ -121,7 +121,7 @@
             <span class="badge badge-{{ 'red' if a.level == 'CRITICAL' else ('yellow' if a.level == 'WARNING' else 'gray') }}">
               {{ a.level }}
             </span>
-            <div style="font-size:11px;color:var(--text-3);margin-top:3px">{{ a.raised_at.strftime('%H:%M') }}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:3px">{{ a.raised_at|local('%H:%M') }}</div>
           </td>
         </tr>
         {% endfor %}
@@ -186,7 +186,7 @@
       <span class="badge badge-{{ 'green' if h.event == 'JOIN' else 'gray' }}">{{ 'Joined' if h.event == 'JOIN' else 'Left' }}</span>
       <strong>{{ dev.label or dev.hostname or dev.mac_address }}</strong>
       <span class="muted">{{ h.ip_address or '' }}</span>
-      <span class="muted" style="float:right">{{ h.timestamp.strftime('%d %b %H:%M') }}</span>
+      <span class="muted" style="float:right">{{ h.timestamp|local('%d %b %H:%M') }}</span>
     </li>
     {% endfor %}
   </ul>

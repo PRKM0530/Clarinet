@@ -23,7 +23,14 @@
   </div>
 </div>
 
-{% if latest %}
+{% if test_running %}
+<div class="flash-bar success" style="margin-bottom:16px">A speed test is running. This page refreshes by itself when it finishes (about 1–2 minutes).</div>
+<script>setTimeout(function(){ location.reload(); }, 8000);</script>
+{% elif latest_failed %}
+<div class="flash-bar error" style="margin-bottom:16px">The last speed test did not finish. The speed test tool may be missing, or the connection was too slow or offline. Install it with <code>pip install speedtest-cli</code> and check the internet connection, then run the test again.</div>
+{% endif %}
+
+{% if latest and not latest_failed %}
 <div class="stat-grid" style="margin-bottom:24px">
   <div class="stat-card stat-blue">
     <div class="stat-label">Download</div>
@@ -45,7 +52,7 @@
     <div class="stat-value" style="font-size:18px">
       {% if latest.below_plan %}Below plan{% else %}On target{% endif %}
     </div>
-    <div class="stat-meta">Last tested {{ latest.tested_at.strftime('%d %b %H:%M') }}</div>
+    <div class="stat-meta">Last tested {{ latest.tested_at|local('%d %b %H:%M') }}</div>
   </div>
 </div>
 {% endif %}
@@ -76,7 +83,7 @@
       <tbody>
         {% for r in results %}
         <tr>
-          <td style="font-size:12px;color:var(--text-3)">{{ r.tested_at.strftime('%d %b %H:%M') }}</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ r.tested_at|local('%d %b %H:%M') }}</td>
           <td>{{ r.download_mbps|round(1) }} Mbps</td>
           <td>{{ r.upload_mbps|round(1) }} Mbps</td>
           <td>{{ r.latency_ms|round(0)|int }} ms</td>

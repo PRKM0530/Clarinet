@@ -8,7 +8,7 @@
   <table class="facts">
     {% if voucher.data_cap_mb %}<tr><th>Data allowance</th><td>{{ voucher.data_cap_mb }} MB</td></tr>{% endif %}
     {% if voucher.speed_cap_mbps %}<tr><th>Speed limit</th><td>{{ voucher.speed_cap_mbps }} Mbps</td></tr>{% endif %}
-    <tr><th>Ends</th><td>{{ voucher.expires_at.strftime('%d %b %Y at %H:%M') }}</td></tr>
+    <tr><th>Ends</th><td>{{ voucher.expires_at|local('%d %b %Y at %H:%M') }}</td></tr>
   </table>
   <p class="muted small">You can browse the internet now. Access ends by itself when the voucher expires.</p>
 </div>

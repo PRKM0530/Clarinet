@@ -47,7 +47,14 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     pending = [(r, db.get(Member, r.member_id)) for r in
                db.query(AdminRequest).filter(AdminRequest.status == "PENDING").order_by(AdminRequest.requested_at)]
 
+    from clarinet.core_svc import netinfo
+    from clarinet.core_svc.localtime import common_zones, configured_zone
+    iface = cfg.get("network_interface", "")
     return templates.TemplateResponse("settings/index.html", {
+        "zones": common_zones(),
+        "current_zone": configured_zone(db),
+        "interface_missing": bool(iface) and iface not in netinfo.list_interfaces() + ["lo"],
+        "interfaces_here": netinfo.list_interfaces(),
         "request": request,
         "user": user,
         "page": "settings",
@@ -73,7 +80,11 @@ def _number(text, low, high, whole=False):
 
 def _validate_settings(params: dict) -> str | None:
     """Return an error code for the first invalid value, or None. Blank values are skipped."""
+    from clarinet.core_svc import netinfo
+    from clarinet.core_svc.localtime import valid_zone
     checks = [
+        ("network_interface", lambda v: netinfo.interface_name_ok(v), "bad_interface"),
+        ("timezone", lambda v: valid_zone(v), "bad_timezone"),
         ("network_mode", lambda v: v.upper() in ("FULL", "MONITOR", "PUBLIC"), "bad_mode"),
         ("plan_download_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
         ("plan_upload_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
@@ -105,6 +116,7 @@ def update_settings(
     slowdown_latency_multiplier: Optional[str] = Form(None),
     slowdown_speed_threshold: Optional[str]    = Form(None),
     router_ip: Optional[str] = Form(None),
+    timezone: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     result = require_admin(request, db)
@@ -115,6 +127,7 @@ def update_settings(
     params = {
         "network_mode": network_mode,
         "network_interface": network_interface,
+        "timezone": timezone,
         "plan_download_mbps": plan_download_mbps,
         "plan_upload_mbps": plan_upload_mbps,
         "billing_day": billing_day,
@@ -172,6 +185,9 @@ def update_settings(
                 _set(db, key, val)
                 changed.append(key)
 
+    if "timezone" in changed:
+        from clarinet.core_svc.localtime import reset_cache
+        reset_cache()
     if changed:
         audit(db, user.member_id, "UPDATE_SETTINGS", detail={"changed": changed})
 

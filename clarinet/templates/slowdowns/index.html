@@ -7,13 +7,17 @@
   <p>Times the network was slower than usual, with the most likely cause for each.</p>
 </div>
 
+{% if not baseline_ready %}
+<div class="flash-bar success" style="margin-bottom:16px">Clarinet is still learning what is normal for your network (it needs about a day of data). Until then it may stay quiet even when things feel slow.</div>
+{% endif %}
+
 {% if active %}
 <div class="slowdown-banner" style="margin-bottom:24px">
   <div class="slowdown-banner-icon"></div>
   <div>
     <div style="font-size:14.5px;font-weight:700;color:var(--red)">Active Slowdown</div>
     <div style="font-size:13px;color:var(--text-2);margin-top:3px">
-      Detected {{ active.started_at.strftime('%H:%M') }} ·
+      Detected {{ active.started_at|local('%H:%M') }} ·
       {% if active.causes %}
         Root cause: <strong>{{ active.causes[0].get('cause','').replace('_',' ').title() }}</strong>
         <span class="badge badge-{{ 'red' if active.causes[0].get('confidence') == 'HIGH' else 'yellow' }}" style="margin-left:6px">
@@ -34,11 +38,11 @@
   <div class="card-header">
     
     <div>
-      <div class="card-header-title">{{ e.started_at.strftime('%d %b %Y, %H:%M') }}</div>
+      <div class="card-header-title">{{ e.started_at|local('%d %b %Y, %H:%M') }}</div>
       <div style="font-size:11.5px;color:var(--text-3);margin-top:1px">
         {% if e.ended_at %}
           Duration: {{ ((e.ended_at - e.started_at).seconds // 60) }} min ·
-          Ended {{ e.ended_at.strftime('%H:%M') }}
+          Ended {{ e.ended_at|local('%H:%M') }}
         {% else %}
           <span style="color:var(--red);font-weight:600">Still ongoing</span>
         {% endif %}
@@ -93,6 +97,22 @@
   
   <h4>No slowdown events</h4>
   <p>Clarinet monitors your latency and speed 24/7. Events appear here automatically.</p>
+</div>
+{% endif %}
+{% if user.is_admin %}
+<div class="card" style="margin-top:24px">
+  <div class="card-header"><span class="card-title">Detection settings</span></div>
+  <div class="card-body">
+    <form method="post" action="/slowdowns/settings" style="display:flex;gap:16px;flex-wrap:wrap;align-items:end">
+      <div><label class="form-label" for="sd-lat">Latency counts as slow above (× normal)</label>
+        <input class="form-input" id="sd-lat" name="latency_multiplier" type="number" step="0.1" min="1" max="10" value="{{ latency_mult }}"></div>
+      <div><label class="form-label" for="sd-spd">Speed counts as slow below (share of plan, 0.1–1)</label>
+        <input class="form-input" id="sd-spd" name="speed_threshold" type="number" step="0.05" min="0.1" max="1" value="{{ speed_thresh }}"></div>
+      <div><label class="form-label" for="sd-if">Wi-Fi interface (optional)</label>
+        <input class="form-input" id="sd-if" name="wifi_iface" value="{{ wifi_iface }}" placeholder="e.g. wlan0"></div>
+      <button class="btn btn-primary" type="submit">Save</button>
+    </form>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

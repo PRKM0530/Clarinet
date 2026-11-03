@@ -26,6 +26,8 @@ def _failed_speed_run(monkeypatch):
 
 
 def _set(key, value):
+    from clarinet.core_svc.localtime import reset_cache
+    reset_cache()
     from clarinet.database import SessionLocal
     from clarinet.models import Settings
     with SessionLocal() as db:

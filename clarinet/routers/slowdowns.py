@@ -99,8 +99,14 @@ def slowdowns_page(request: Request, db: Session = Depends(get_db)):
     sec_monitor_iface = get_setting(db, "sec.monitor_iface", "")
     wifi_iface_effective = sec_monitor_iface or perf_wifi_iface
 
+    try:
+        from clarinet.analytics.baseline import is_baseline_ready
+        baseline_ready = bool(is_baseline_ready(db))
+    except Exception:
+        baseline_ready = True
     return templates.TemplateResponse("slowdowns/index.html", {
         "request": request,
+        "baseline_ready": baseline_ready,
         "user": user,
         "page": "slowdowns",
         "events": parsed_events,

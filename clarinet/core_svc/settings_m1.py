@@ -155,7 +155,8 @@ def network_mode(db: Session) -> str:
 
 
 def timezone_setting(db: Session) -> str:
-    return _get(db, "timezone", "Asia/Kolkata")
+    from clarinet.core_svc.localtime import configured_zone
+    return configured_zone(db)
 
 
 def setup_complete(db: Session) -> bool:

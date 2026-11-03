@@ -37,7 +37,7 @@ def reports_page(request: Request, db: Session = Depends(get_db)):
 
     view = "day" if request.query_params.get("view") == "day" else "week"
     today = datetime.now(timezone.utc).date()
-    end_day = _parse_day(request.query_params.get("date"), today - timedelta(days=1))
+    end_day = _parse_day(request.query_params.get("date"), today)
     step = 1 if view == "day" else 7
 
     report = build_report(db, user, view, end_day)

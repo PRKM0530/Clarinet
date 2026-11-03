@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
+import sys
 import threading
 from datetime import datetime, timezone
 
@@ -45,13 +47,23 @@ def _is_busy(db) -> bool:
     return False
 
 
+def _tool_env() -> dict:
+    """Environment for speed tools: also look next to this Python (the virtualenv's bin directory),
+    so the tool is found without activating the environment. CLARINET_NO_VENV_TOOLS=1 turns it off."""
+    env = dict(os.environ)
+    if not env.get("CLARINET_NO_VENV_TOOLS"):
+        venv_bin = os.path.dirname(os.path.abspath(sys.executable))
+        env["PATH"] = (env.get("PATH", "") + os.pathsep + venv_bin) if env.get("PATH") else venv_bin
+    return env
+
+
 def _run_speedtest_cli() -> dict | None:
     """Run speedtest-cli (Ookla or open-source) and return parsed result."""
     # Try Ookla CLI first (uses --format=json)
     try:
         proc = subprocess.run(
             ["speedtest", "--format=json", "--accept-license", "--accept-gdpr"],
-            capture_output=True, timeout=90,
+            capture_output=True, timeout=90, env=_tool_env(),
         )
         if proc.returncode == 0:
             data = json.loads(proc.stdout)
@@ -69,7 +81,7 @@ def _run_speedtest_cli() -> dict | None:
     try:
         proc = subprocess.run(
             ["speedtest-cli", "--json", "--secure"],
-            capture_output=True, timeout=90,
+            capture_output=True, timeout=90, env=_tool_env(),
         )
         if proc.returncode == 0:
             data = json.loads(proc.stdout)
@@ -87,7 +99,7 @@ def _run_speedtest_cli() -> dict | None:
     try:
         proc = subprocess.run(
             ["librespeed-cli", "--json"],
-            capture_output=True, timeout=90,
+            capture_output=True, timeout=90, env=_tool_env(),
         )
         if proc.returncode == 0:
             data = json.loads(proc.stdout)

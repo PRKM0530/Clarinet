@@ -2,9 +2,10 @@
 {% block title %}Alerts{% endblock %}
 {% block page_title %}Alerts{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h2>Alerts</h2>
-  <p>{{ open_count }} open &mdash; {{ critical_count }} critical</p>
+<div class="page-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+  <div><h2>Alerts</h2>
+  <p>{{ open_count }} open &mdash; {{ critical_count }} critical</p></div>
+  <a href="/export/alerts.csv" class="btn btn-secondary btn-sm">Export CSV</a>
 </div>
 <form method="get" action="/alerts" class="card" style="margin-bottom:16px">
   <div class="card-body" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
@@ -52,7 +53,7 @@
             </a>
             {% else %}<span style="color:var(--text-3)">—</span>{% endif %}
           </td>
-          <td style="font-size:12px;color:var(--text-3);white-space:nowrap">{{ a.raised_at.strftime('%d %b %H:%M') }}</td>
+          <td style="font-size:12px;color:var(--text-3);white-space:nowrap">{{ a.raised_at|local('%d %b %H:%M') }}</td>
           <td>
             <span class="badge {{ 'badge-red' if a.status == 'OPEN' else ('badge-yellow' if a.status == 'ACK' else 'badge-green') }}">
               {{ a.status }}

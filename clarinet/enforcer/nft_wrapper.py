@@ -18,6 +18,7 @@ Fixes applied (F-05, F-06):
 """
 from __future__ import annotations
 
+from clarinet.core_svc.localtime import configured_zone
 import json
 import logging
 import subprocess
@@ -296,11 +297,11 @@ def apply_time_rules() -> None:
         from clarinet.core_svc.mode import can_enforce, parse_mode
         if not can_enforce(parse_mode(get_setting(db, "network_mode"))):
             return                                   # time rules only act in Full Control mode
-        tz_name = get_setting(db, "timezone", "Asia/Kolkata")
+        tz_name = configured_zone(db)
         try:
             tz = ZoneInfo(tz_name)
         except Exception:
-            tz = ZoneInfo("Asia/Kolkata")
+            tz = ZoneInfo("UTC")
 
         now_local = datetime.now(tz)
         now_time = now_local.time()

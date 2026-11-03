@@ -30,7 +30,15 @@
           <input id="f-network_interface-1" type="text" name="network_interface" class="form-input"
                  value="{{ cfg.get('network_interface', 'eth0') }}"
                  placeholder="eth0 / ens3 / wlan0" />
-          <p class="form-help">The interface connected to your router.</p>
+          <p class="form-help">The interface connected to your router.{% if interfaces_here %} On this machine: {{ interfaces_here|join(', ') }}.{% endif %}</p>
+          {% if interface_missing %}<p class="form-help" style="color:var(--red)">There is no interface called "{{ cfg.get('network_interface') }}" on this machine, so Clarinet cannot see any devices. Pick one of the names above.</p>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-timezone-1">Time zone</label>
+          <select id="f-timezone-1" name="timezone" class="form-select">
+            {% for z in zones %}<option value="{{ z }}"{{ ' selected' if current_zone == z else '' }}>{{ z }}</option>{% endfor %}
+          </select>
+          <p class="form-help">Times on every page and time rules (for example 22:00) use this zone.</p>
         </div>
         <div class="form-group">
           <label class="form-label" for="f-router_ip-1">Router IP</label>
@@ -107,7 +115,7 @@
           <tbody>
             {% for r, who in admin_requests %}
             <tr>
-              <td><strong>{{ who.username }}</strong> <span class="muted">asked {{ r.requested_at.strftime('%d %b %H:%M') }}</span></td>
+              <td><strong>{{ who.username }}</strong> <span class="muted">asked {{ r.requested_at|local('%d %b %H:%M') }}</span></td>
               <td style="text-align:right;padding-right:14px">
                 <div style="display:flex;gap:6px;justify-content:flex-end">
                   <form method="post" action="/settings/admin-requests/{{ r.member_id }}/approve"

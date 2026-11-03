@@ -30,8 +30,8 @@
           <td>
             <code style="font-size:15px;font-weight:700;letter-spacing:.1em;color:var(--text)">{{ v.code }}</code>
           </td>
-          <td style="font-size:12px;color:var(--text-3)">{{ v.created_at.strftime('%d %b %H:%M') }}</td>
-          <td style="font-size:12px;color:var(--text-3)">{{ v.expires_at.strftime('%d %b %H:%M') }}</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ v.created_at|local('%d %b %H:%M') }}</td>
+          <td style="font-size:12px;color:var(--text-3)">{{ v.expires_at|local('%d %b %H:%M') }}</td>
           <td style="font-size:13px;color:var(--text-2)">{{ v.data_cap_mb|string + ' MB' if v.data_cap_mb else 'Unlimited' }}</td>
           <td style="font-size:13px;color:var(--text-2)">{{ v.speed_cap_mbps|string + ' Mbps' if v.speed_cap_mbps else 'Unlimited' }}</td>
           <td>

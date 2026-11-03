@@ -80,6 +80,7 @@
     </button>
     <h1 class="topbar-title">{% block page_title %}{% endblock %}</h1>
     <div class="topbar-right">
+      <span class="muted" title="All times on these pages are shown in this time zone" style="font-size:12px">{{ local_zone() }}</span>
       <span id="mode-label" title="What Clarinet is allowed to do on this network"></span>
       <div class="ws-pill" id="ws-pill" role="status">
         <span class="ws-dot connecting" id="ws-indicator" aria-hidden="true"></span>

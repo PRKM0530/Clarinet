@@ -11,6 +11,7 @@ def tools(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     monkeypatch.setenv("PATH", str(bindir))
+    monkeypatch.setenv("CLARINET_NO_VENV_TOOLS", "1")   # never fall back to the real venv tools
     for helper in ("cat", "sleep"):                     # the only real programs the fake scripts need
         (bindir / helper).symlink_to(f"/usr/bin/{helper}")
 

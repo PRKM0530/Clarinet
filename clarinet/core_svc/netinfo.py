@@ -147,3 +147,24 @@ def recommend_mode(caps: dict[str, bool]) -> str:
         return "FULL"
     return "MONITOR"
 
+
+
+def list_interfaces() -> list[str]:
+    """Network interface names on this machine (without the loopback), the one carrying traffic to the internet first."""
+    try:
+        names = [name for _, name in socket.if_nameindex() if name != "lo"]
+    except OSError:
+        names = []
+    default = detect_interface()
+    if default in names:
+        names.remove(default)
+        names.insert(0, default)
+    return names
+
+
+_IFACE_OK = re.compile(r"^[A-Za-z0-9_.:@-]{1,15}$")
+
+
+def interface_name_ok(name: str) -> bool:
+    """A plausible Linux interface name (letters, digits, - _ . : @, at most 15 characters)."""
+    return bool(_IFACE_OK.match(name or ""))
