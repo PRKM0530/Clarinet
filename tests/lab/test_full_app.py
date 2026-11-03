@@ -104,6 +104,7 @@ class RunningApp:
 def app():
     for ip in ("8.8.8.8", "1.1.1.1"):
         ns("internet", "ip", "addr", "add", f"{ip}/32", "dev", "lo")
+    sh("nft", "delete", "table", "bridge", "clarinet")        # left over from earlier runs
     sh("ip", "neigh", "flush", "dev", IFACE)                  # earlier lab tests leave the attacker (and others) in the table
     for client in ("a", "b", "guest"):                       # make the clients visible to the router's ARP table
         ns(client, "ping", "-c", "1", "-W", "1", ROUTER_IP)
@@ -223,7 +224,15 @@ def test_guest_access_survives_an_app_restart_and_the_session_cookie_still_works
     app.restart()
     assert app.client.get("/dashboard").status_code == 200, "the old session cookie stopped working after restart"
     assert app.query("select status from voucher order by voucher_id desc limit 1")[0][0] == "ACTIVE"
-    assert f"guest_{mac_of('guest')}" in nft_ruleset()
+    mac = mac_of("guest")
+    assert f"guest_{mac}" in nft_ruleset(), (
+        "the guest's rules were gone after the restart.\n"
+        f"guest device: {app.query('select mac_address, state, ip_address from device where lower(mac_address) = ?', mac)}\n"
+        f"enforcement: {app.query('select mac, expires_at from enforcement_status')}\n"
+        f"voucher: {app.query('select code, status, expires_at from voucher order by voucher_id desc limit 1')}\n"
+        f"utc now: {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())}\n"
+        f"guest chain:\n{sh('nft', 'list', 'chain', 'inet', 'clarinet', 'guest_forward').stdout}\n"
+        f"log: {[l[:150] for l in app.log_text().splitlines() if any(k in l for k in ('Guest', 'Reconcile', 'closed', 'opened', 'Error', 'error'))][-12:]}")
     assert len(device_rows(app)) >= 3
 
 

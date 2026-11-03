@@ -82,7 +82,9 @@ def clean_router_state():
     """Every test starts and ends with no Clarinet nft table and no tc shaping on br-lan."""
     def wipe():
         sh("nft", "delete", "table", "inet", "clarinet")
+        sh("nft", "delete", "table", "bridge", "clarinet")            # guest isolation rules
         sh("tc", "qdisc", "del", "dev", IFACE, "root")
+        sh("tc", "qdisc", "del", "dev", IFACE, "ingress")
     wipe()
     yield
     wipe()
