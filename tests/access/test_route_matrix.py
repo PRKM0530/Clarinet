@@ -25,6 +25,8 @@ R = [
     ("GET", "/logout", "public", None, "html"),
     ("GET", "/setup", "public", None, "html"),
     ("POST", "/setup/admin", "public", {"username": "x1", "password": "pw-12345678", "password_confirm": "pw-12345678"}, "html"),
+    ("GET", "/signup", "public", None, "html"),
+    ("POST", "/signup", "public", {"username": "x1", "password": "pw-12345678", "password_confirm": "pw-12345678"}, "html"),
     ("GET", "/guest", "public", None, "html"),
     ("POST", "/guest/redeem", "public", {"code": "NOPE-0000"}, "html"),
     ("GET", "/privacy", "public", None, "html"),
@@ -35,6 +37,8 @@ R = [
     ("GET", "/devices/{d_alice}", "user", None, "html"),
     ("POST", "/devices/{d_alice}/rename", "user", {"label": "x"}, "html"),
     ("GET", "/account", "user", None, "html"),
+    ("POST", "/account/admin-request", "user", {}, "html"),
+    ("POST", "/devices/claim", "user", {}, "html"),
     ("POST", "/account/password", "user", {"current_password": "wrong", "new_password": "pw-new-12345", "confirm_password": "pw-new-12345"}, "html"),
     ("GET", "/export/devices.csv", "user", None, "html"),
     ("GET", "/alerts", "user", None, "html"),
@@ -68,6 +72,11 @@ R = [
     ("POST", "/devices/{d_new}/unblock", "admin", {}, "html"),
     ("POST", "/devices/{d_new}/delete", "admin", {}, "html"),
     ("POST", "/alerts/{alert_id}/resolve", "admin", {}, "html"),
+    ("POST", "/devices/claims/{claim_id}/approve", "admin", {}, "html"),
+    ("POST", "/devices/claims/{claim_id}/decline", "admin", {}, "html"),
+    ("POST", "/settings/admin-requests/{member_id}/approve", "admin", {}, "html"),
+    ("POST", "/settings/admin-requests/{member_id}/decline", "admin", {}, "html"),
+    ("POST", "/settings/signup", "admin", {"enabled": "yes"}, "html"),
     ("GET", "/vouchers", "admin", None, "html"),
     ("POST", "/vouchers/create", "admin", {"expires_minutes": "60"}, "html"),
     ("POST", "/vouchers/{voucher_id}/revoke", "admin", {}, "html"),
@@ -112,7 +121,7 @@ R = [
 ]
 
 PARAM_TO_KEY = {"device_id": "d_new", "alert_id": "alert_id", "voucher_id": "voucher_id", "grant_id": "grant_id",
-                "rule_id": "rule_id", "ap_id": "ap_id", "network_id": "network_id", "member_id": "bob"}
+                "rule_id": "rule_id", "ap_id": "ap_id", "network_id": "network_id", "member_id": "bob", "claim_id": "claim_id"}
 
 
 def _fill(text, ids):

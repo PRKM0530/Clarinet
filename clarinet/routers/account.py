@@ -18,10 +18,13 @@ def account_page(request: Request, db: Session = Depends(get_db)):
     result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
+    from clarinet.models.accounts import AdminRequest
+    admin_request = db.get(AdminRequest, result.member_id)
     return templates.TemplateResponse("account/index.html", {
         "request": request,
         "user": result,
         "page": "account",
+        "admin_status": admin_request.status if admin_request else None,
         "info": request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })
@@ -58,3 +61,16 @@ def change_password(
     audit(db, user.member_id, "CHANGE_PASSWORD", "Member", user.member_id)
     end_other_sessions(db, user.member_id, request.session.get("sid"))     # other devices must sign in again
     return back("password_changed", "info")
+
+
+@router.post("/admin-request")
+def ask_for_admin_access(request: Request, db: Session = Depends(get_db)):
+    """A member asks to become an administrator; an existing administrator decides."""
+    result = require_login(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    from clarinet.core_svc.accounts import ask_for_admin
+    asked = ask_for_admin(db, result)
+    if asked:
+        audit(db, result.member_id, "ADMIN_REQUEST", "Member", result.member_id)
+    return RedirectResponse(url="/account?info=" + ("admin_asked" if asked else "admin_already"), status_code=302)

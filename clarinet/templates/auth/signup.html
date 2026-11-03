@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="auth-logo">Clarinet</div>
+  <div class="auth-title">Create your account</div>
+  {% if enabled %}
+  <div class="auth-sub">Make an account to see your own devices and usage.</div>
+  {% if error %}<div class="flash-bar error" style="margin:0 0 16px" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/signup">
+    <div class="form-group">
+      <label class="form-label" for="username">Username</label>
+      <input type="text" id="username" name="username" class="form-input" value="{{ username_val }}" autocomplete="username" minlength="3" required autofocus />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="password">Password</label>
+      <input type="password" id="password" name="password" class="form-input" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="password_confirm">Confirm password</label>
+      <input type="password" id="password_confirm" name="password_confirm" class="form-input" autocomplete="new-password" required />
+    </div>
+    <div class="form-group">
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px">
+        <input type="checkbox" name="want_admin" value="yes" {{ 'checked' if want_admin else '' }} />
+        <span>I need administrator access. An administrator has to approve this; until then I am a normal member.</span>
+      </label>
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg" style="width:100%">Create account</button>
+  </form>
+  {% else %}
+  <div class="auth-sub">{{ error or 'Sign-up is turned off on this network. Ask an administrator for an account.' }}</div>
+  {% endif %}
+  <p style="text-align:center;margin-top:16px;font-size:13px">Already have an account? <a href="/login">Sign in</a></p>
+</div>
+{% endblock %}

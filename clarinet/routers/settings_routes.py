@@ -42,6 +42,10 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 
     cfg = _get_all_settings(db)
     members = db.query(Member).order_by(Member.created_at).all()
+    from clarinet.models.accounts import AdminRequest
+    from clarinet.routers.signup import signup_enabled
+    pending = [(r, db.get(Member, r.member_id)) for r in
+               db.query(AdminRequest).filter(AdminRequest.status == "PENDING").order_by(AdminRequest.requested_at)]
 
     return templates.TemplateResponse("settings/index.html", {
         "request": request,
@@ -49,6 +53,8 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         "page": "settings",
         "cfg": cfg,
         "members": members,
+        "admin_requests": pending,
+        "signup_on": signup_enabled(db),
         "info":  request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })
@@ -213,7 +219,8 @@ def create_member(
     if len(username) < 3:
         return RedirectResponse(url="/settings?error=bad_username", status_code=302)
 
-    if db.query(Member).filter(Member.username == username).first():
+    from sqlalchemy import func as _f
+    if db.query(Member).filter(_f.lower(Member.username) == username.lower()).first():
         return RedirectResponse(url="/settings?error=username_taken", status_code=302)
 
     if len(password) < 8:
@@ -283,3 +290,38 @@ def reset_password(
         from clarinet.auth import end_sessions
         end_sessions(db, member_id)
     return RedirectResponse(url="/settings?info=password_reset", status_code=302)
+
+
+# Administrator-access requests and the sign-up switch
+
+def _decide(member_id: int, approve: bool, request: Request, db: Session):
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    from clarinet.core_svc.accounts import decide_admin_request
+    member = decide_admin_request(db, member_id, approve, result.member_id)
+    if member is None:
+        return RedirectResponse(url="/settings?error=not_found", status_code=302)
+    audit(db, result.member_id, "ADMIN_APPROVED" if approve else "ADMIN_DECLINED", "Member", member_id)
+    return RedirectResponse(url="/settings?info=" + ("admin_approved" if approve else "admin_declined"), status_code=302)
+
+
+@router.post("/admin-requests/{member_id}/approve")
+def approve_admin_request(member_id: int, request: Request, db: Session = Depends(get_db)):
+    return _decide(member_id, True, request, db)
+
+
+@router.post("/admin-requests/{member_id}/decline")
+def decline_admin_request(member_id: int, request: Request, db: Session = Depends(get_db)):
+    return _decide(member_id, False, request, db)
+
+
+@router.post("/signup")
+def set_signup(request: Request, enabled: str = Form("yes"), db: Session = Depends(get_db)):
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    on = enabled == "yes"
+    _set(db, "signup_enabled", "true" if on else "false")
+    audit(db, result.member_id, "UPDATE_SETTINGS", detail={"changed": ["signup_enabled"], "value": on})
+    return RedirectResponse(url="/settings?info=" + ("signup_on" if on else "signup_off"), status_code=302)

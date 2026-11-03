@@ -22,6 +22,47 @@
   {% endif %}
 </div>
 
+{% if claim.state == 'claimable' %}
+<div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent)">
+  <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px">
+      <strong>Is this device yours?</strong>
+      <div class="muted">You are using <code>{{ claim.device.label or claim.device.hostname or claim.device.mac_address }}</code> ({{ claim.device.ip_address }}).
+        {% if not user.is_admin %}An administrator will confirm it.{% endif %}</div>
+    </div>
+    <form method="post" action="/devices/claim"><button class="btn btn-primary" type="submit">This is my device</button></form>
+  </div>
+</div>
+{% elif claim.state == 'pending' %}
+<div class="card" style="margin-bottom:16px"><div class="card-body">Your request for <code>{{ claim.device.label or claim.device.hostname or claim.device.mac_address }}</code> is waiting for an administrator.</div></div>
+{% elif claim.state == 'none' and not user.is_admin and not devices %}
+<div class="card" style="margin-bottom:16px"><div class="card-body">
+  <strong>You have no devices yet.</strong>
+  <div class="muted">Open this page from the phone or computer you want to add, while it is connected to this network. Clarinet will offer to add it. If it does not appear, wait a minute and reload.</div>
+</div></div>
+{% endif %}
+
+{% if claims %}
+<div class="card" style="margin-bottom:16px;border-left:3px solid var(--yellow)">
+  <div class="card-header"><span class="card-header-title">Devices people say are theirs</span></div>
+  <div class="table-wrap">
+    <table class="cl-table"><tbody>
+      {% for c, dev, who in claims %}
+      <tr>
+        <td><strong>{{ who.username }}</strong> says <code>{{ dev.label or dev.hostname or dev.mac_address }}</code> ({{ dev.ip_address or 'no address' }}) is theirs</td>
+        <td style="text-align:right;padding-right:14px">
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            <form method="post" action="/devices/claims/{{ c.claim_id }}/approve"><button class="btn btn-success btn-sm">Confirm</button></form>
+            <form method="post" action="/devices/claims/{{ c.claim_id }}/decline"><button class="btn btn-ghost btn-sm">Decline</button></form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
   <div class="table-wrap">
     <table class="cl-table" id="device-table">
@@ -94,8 +135,13 @@
           <td colspan="8">
             <div class="empty-state">
               
+              {% if user.is_admin %}
               <h4>No devices discovered yet</h4>
-              <p>Start the collector on Linux to begin ARP scanning.</p>
+              <p>Clarinet finds devices by scanning the network every 15 seconds. If this stays empty, check the network interface in Settings.</p>
+              {% else %}
+              <h4>No devices of yours yet</h4>
+              <p>Open this page from the phone or computer you want to add. Clarinet will offer to add it, and an administrator confirms.</p>
+              {% endif %}
             </div>
           </td>
         </tr>

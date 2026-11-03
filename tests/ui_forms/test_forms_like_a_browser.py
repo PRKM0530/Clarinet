@@ -17,7 +17,7 @@ ADMIN_PAGES = ["/dashboard", "/devices", "/devices/{d_new}", "/devices/{d_alice}
                "/account"]
 MEMBER_PAGES = ["/dashboard", "/devices", "/devices/{d_alice}", "/alerts", "/priority", "/usage", "/reports",
                 "/account"]
-PUBLIC_PAGES = ["/login", "/guest", "/privacy"]
+PUBLIC_PAGES = ["/login", "/signup", "/guest", "/privacy"]
 
 # What a person types into boxes the page marks as required (anything else stays as the browser leaves it)
 TYPED = {"username": "newperson", "password": "pw-newperson-123", "new_password": "pw-changed-12345",

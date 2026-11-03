@@ -99,6 +99,46 @@
 
   <!-- Member management -->
   <div>
+    {% if admin_requests %}
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--yellow)">
+      <div class="card-header"><span class="card-header-title">Administrator access requested</span></div>
+      <div class="table-wrap">
+        <table class="cl-table">
+          <tbody>
+            {% for r, who in admin_requests %}
+            <tr>
+              <td><strong>{{ who.username }}</strong> <span class="muted">asked {{ r.requested_at.strftime('%d %b %H:%M') }}</span></td>
+              <td style="text-align:right;padding-right:14px">
+                <div style="display:flex;gap:6px;justify-content:flex-end">
+                  <form method="post" action="/settings/admin-requests/{{ r.member_id }}/approve"
+                        onsubmit="return confirm('Give {{ who.username }} full administrator access?')">
+                    <button class="btn btn-success btn-sm">Approve</button>
+                  </form>
+                  <form method="post" action="/settings/admin-requests/{{ r.member_id }}/decline">
+                    <button class="btn btn-ghost btn-sm">Decline</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-body">
+        <form method="post" action="/settings/signup" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="form-label" for="signup-enabled" style="margin:0">People can create their own accounts</label>
+          <select id="signup-enabled" name="enabled" class="form-select" style="max-width:120px">
+            <option value="yes"{{ ' selected' if signup_on else '' }}>Yes</option>
+            <option value="no"{{ '' if signup_on else ' selected' }}>No</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" type="submit">Save</button>
+        </form>
+        <p class="muted" style="margin:8px 0 0">New accounts are normal members. Anyone who asks for administrator access waits for your approval here.</p>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:16px">
       <div class="card-header">
         

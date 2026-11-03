@@ -34,7 +34,7 @@ def devices_list(request: Request, db: Session = Depends(get_db)):
         return result
     user = result
 
-    from clarinet.models import Device
+    from clarinet.models import Device, Member
     from clarinet.core_svc.permissions import member_device_ids
 
     search = request.query_params.get("q", "").strip()
@@ -56,7 +56,19 @@ def devices_list(request: Request, db: Session = Depends(get_db)):
 
     devices = q.order_by(Device.last_seen.desc()).all()
 
+    from clarinet.auth import client_ip
+    from clarinet.core_svc.accounts import claim_state, detect_device
+    from clarinet.models.accounts import DeviceClaim
+    here = detect_device(db, client_ip(request))
+    claim = {"device": here, "state": claim_state(db, here, user)}
+    claims = []
+    if user.is_admin:
+        claims = [(c, db.get(Device, c.device_id), db.get(Member, c.member_id)) for c in
+                  db.query(DeviceClaim).filter(DeviceClaim.status == "PENDING").order_by(DeviceClaim.requested_at)]
+
     return templates.TemplateResponse("devices/index.html", {
+        "claim": claim,
+        "claims": claims,
         "request": request,
         "user": user,
         "page": "devices",
@@ -431,3 +443,68 @@ def export_devices_csv(request: Request, db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="devices.csv"'},
     )
+
+
+# "This is my device": a member claims the device they are using; an administrator confirms.
+
+@router.post("/devices/claim")
+def claim_this_device(request: Request, db: Session = Depends(get_db)):
+    result = require_login(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+    from clarinet.auth import client_ip
+    from clarinet.core_svc.accounts import claim_state, detect_device
+    from clarinet.core_svc.alerts import raise_alert
+    from clarinet.models.accounts import DeviceClaim
+
+    device = detect_device(db, client_ip(request))
+    state = claim_state(db, device, user)
+    if state == "none":
+        return RedirectResponse(url="/devices?error=claim_no_device", status_code=302)
+    if state != "claimable":
+        return RedirectResponse(url="/devices?error=claim_taken" if state == "taken" else "/devices", status_code=302)
+    if user.is_admin:                                              # an administrator needs nobody's confirmation
+        device.owner_member_id = user.member_id
+        audit(db, user.member_id, "SET_DEVICE_OWNER", "Device", device.device_id, {"owner": user.member_id})
+        return RedirectResponse(url="/devices?info=claim_done", status_code=302)
+    db.add(DeviceClaim(device_id=device.device_id, member_id=user.member_id, status="PENDING"))
+    db.commit()
+    audit(db, user.member_id, "DEVICE_CLAIM", "Device", device.device_id)
+    raise_alert(db, "INFO", "DEVICE_CLAIM", f"{user.username} says a device is theirs",
+                f"{user.username} asked to own {device.label or device.hostname or device.mac_address}. Confirm it on the Devices page.",
+                device_id=device.device_id, cooldown_s=3600)
+    return RedirectResponse(url="/devices?info=claim_sent", status_code=302)
+
+
+def _decide_claim(claim_id: int, approve: bool, request: Request, db: Session):
+    result = require_admin(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    from clarinet.models import Alert, Device
+    from clarinet.models.accounts import DeviceClaim
+    claim = db.get(DeviceClaim, claim_id)
+    device = db.get(Device, claim.device_id) if claim else None
+    if claim is None or claim.status != "PENDING" or device is None:
+        return RedirectResponse(url="/devices?error=not_found", status_code=302)
+    if approve and device.owner_member_id not in (None, claim.member_id):
+        claim.status = "DECLINED"
+        db.commit()
+        return RedirectResponse(url="/devices?error=claim_taken", status_code=302)
+    claim.status = "APPROVED" if approve else "DECLINED"
+    if approve:
+        device.owner_member_id = claim.member_id
+    for alert in db.query(Alert).filter(Alert.type == "DEVICE_CLAIM", Alert.device_id == device.device_id, Alert.status != "RESOLVED"):
+        alert.status = "RESOLVED"
+    audit(db, result.member_id, "CLAIM_APPROVED" if approve else "CLAIM_DECLINED", "Device", device.device_id, {"member": claim.member_id})
+    return RedirectResponse(url="/devices?info=" + ("claim_approved" if approve else "claim_declined"), status_code=302)
+
+
+@router.post("/devices/claims/{claim_id}/approve")
+def approve_claim(claim_id: int, request: Request, db: Session = Depends(get_db)):
+    return _decide_claim(claim_id, True, request, db)
+
+
+@router.post("/devices/claims/{claim_id}/decline")
+def decline_claim(claim_id: int, request: Request, db: Session = Depends(get_db)):
+    return _decide_claim(claim_id, False, request, db)

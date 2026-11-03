@@ -1,5 +1,22 @@
 {% extends "base_app.html" %}
-{% block title %}My account{% endblock %}
+{% block title %}My account
+{% if not user.is_admin %}
+<div class="card" style="max-width:480px;margin-top:20px">
+  <div class="card-header"><span class="card-header-title">Administrator access</span></div>
+  <div class="card-body">
+    {% if admin_status == 'PENDING' %}
+    <p>Your request is waiting for an administrator.</p>
+    {% else %}
+    {% if admin_status == 'DECLINED' %}<p class="muted">Your last request was declined.</p>{% endif %}
+    <p class="muted">Administrators can approve devices, block them, set time rules and change settings. An existing administrator has to approve your request.</p>
+    <form method="post" action="/account/admin-request">
+      <button type="submit" class="btn btn-secondary">Ask for administrator access</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
 {% block page_title %}My account{% endblock %}
 {% block content %}
 <div class="page-header">

@@ -28,6 +28,10 @@
       Sign In
     </button>
   </form>
-  <p style="text-align:center;margin-top:16px;font-size:12px"><a href="/privacy" style="color:var(--text-3)">What does Clarinet collect?</a></p>
+  {% if signup_enabled %}
+  <p style="text-align:center;margin-top:16px;font-size:13px">New here? <a href="/signup">Create an account</a></p>
+  {% endif %}
+  <p style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-3)">Forgot your password? Ask an administrator to reset it.</p>
+  <p style="text-align:center;margin-top:8px;font-size:12px"><a href="/privacy" style="color:var(--text-3)">What does Clarinet collect?</a></p>
 </div>
 {% endblock %}

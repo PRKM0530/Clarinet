@@ -148,4 +148,5 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         "top_devices": top_devices,
         # flash messages
         "error": request.query_params.get("error", ""),
+        "info": request.query_params.get("info", ""),
     })
