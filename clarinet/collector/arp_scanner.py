@@ -152,7 +152,11 @@ def _subnet_of(interface: str) -> str | None:
         for part in out.split():
             if "/" in part and part[0].isdigit():
                 import ipaddress
-                return str(ipaddress.ip_interface(part).network)
+                iface_addr = ipaddress.ip_interface(part)
+                if iface_addr.network.prefixlen < 24:
+                    # A big network (for example a /16) would mean tens of thousands of probes: scan our own /24 only
+                    return str(ipaddress.ip_network(f"{iface_addr.ip}/24", strict=False))
+                return str(iface_addr.network)
     except Exception:
         pass
     return None

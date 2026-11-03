@@ -207,3 +207,14 @@ def test_installer_creates_a_private_env_file():
     script = (root / "deploy" / "install.sh").read_text()
     assert "secrets.token_hex" in script and "chmod 600" in script and "APP_ENV=production" in script
     assert script.index("Private configuration") < script.index("systemctl start clarinet")   # .env exists before the service starts
+
+
+def test_active_scan_never_probes_more_than_one_24(monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+    from clarinet.collector.arp_scanner import _subnet_of
+    for line, expected in (("2: eth0 inet 10.81.34.7/16 brd x scope global eth0", "10.81.34.0/24"),
+                           ("2: eth0 inet 192.168.1.20/24 brd x scope global eth0", "192.168.1.0/24"),
+                           ("2: eth0 inet 192.168.1.130/26 brd x scope global eth0", "192.168.1.128/26")):
+        monkeypatch.setattr(subprocess, "run", lambda *a, _l=line, **k: SimpleNamespace(stdout=_l))
+        assert _subnet_of("eth0") == expected
