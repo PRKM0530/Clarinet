@@ -16,9 +16,8 @@ Routes:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
-from typing import Optional
 
 from clarinet import templates
 from clarinet.auth import require_admin, require_login, audit
@@ -54,7 +53,8 @@ def devices_list(request: Request, db: Session = Depends(get_db)):
             (Device.vendor.ilike(like))
         )
 
-    devices = q.order_by(Device.last_seen.desc()).all()
+    from clarinet.core_svc.device_names import saved_first
+    devices = saved_first(q.all())            # devices you have saved come first, unknown ones after
 
     from clarinet.auth import client_ip
     from clarinet.core_svc.accounts import claim_state, detect_device
@@ -324,7 +324,7 @@ def split_device(
 
 
 def _done(code: str) -> str:
-    """The success message for an action that should reach the network: honest when it could not."""
+    """The message after an action that should reach the network, saying so when it could not."""
     from clarinet.core_svc.enforcement_status import problem
     return f"{code}_pending" if problem() else code
 

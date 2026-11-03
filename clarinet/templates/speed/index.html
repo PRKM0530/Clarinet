@@ -1,14 +1,10 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% from "_ui.html" import device_ref, pill, metric %}
 {% block title %}Speed{% endblock %}
 {% block page_title %}Speed{% endblock %}
 {% block content %}
-{% if user.is_admin %}
-<nav class="tabs" aria-label="Speed views">
-  <a href="/speed?view=internet" class="tab {{ 'active' if view == 'internet' else '' }}"{% if view == 'internet' %} aria-current="page"{% endif %}>Internet connection</a>
-  <a href="/speed?view=devices" class="tab {{ 'active' if view == 'devices' else '' }}"{% if view == 'devices' %} aria-current="page"{% endif %}>Devices</a>
-</nav>
-{% endif %}
+{% if view == 'devices' %}{{ ui.speed_tabs('devices', user.is_admin) }}{% else %}<p><a href="/status">&larr; System status</a></p>{% endif %}
 
 {% if view == 'devices' %}
 {% include "speed/_devices.html" %}
@@ -18,7 +14,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
     <div>
       <h2>Internet connection</h2>
-      <p>Measured at the gateway by the Clarinet computer, not from any one device. Your plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} ↓ / {{ plan_upload|round(0)|int }} ↑ Mbps</strong></p>
+      <p>Measured at the gateway by the Clarinet computer, not from any one device. Your plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} Mbps download, {{ plan_upload|round(0)|int }} Mbps upload</strong></p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       {% if user.is_admin %}
@@ -53,7 +49,7 @@
   </div>
   <div class="stat-card {% if latest.latency_ms > 80 %}stat-orange{% else %}stat-teal{% endif %}">
     <div class="stat-label">Latency</div>
-    <div class="stat-value">{{ latest.latency_ms|round(0)|int }} <small>ms</small></div>
+    <div class="stat-value">{% if latest.latency_ms < 10000 %}{{ latest.latency_ms|round(0)|int }} <small>ms</small>{% else %}n/a{% endif %}</div>
     <div class="stat-meta">Server: {{ latest.server_host or '—' }}</div>
   </div>
   <div class="stat-card {% if latest.below_plan %}stat-red{% else %}stat-green{% endif %}">
@@ -121,7 +117,6 @@
 
 {% block scripts %}
 {% if view == 'devices' %}
-<script src="/static/js/device_speed.js"></script>
 {% else %}
 <script>
 const labels  = {{ chart_labels | tojson }};

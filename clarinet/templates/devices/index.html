@@ -1,4 +1,5 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Devices{% endblock %}
 {% block page_title %}Devices{% endblock %}
 
@@ -7,7 +8,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between">
     <div>
       <h2>Devices</h2>
-      <p>{{ devices|length }} device(s) discovered on your network.</p>
+      <p>{% if 'discovery' in unavailable %}{{ ui.feature_pill(unavailable, 'discovery') }} {{ ui.feature_reason(unavailable, 'discovery', user.is_admin) }}{% else %}{{ devices|length }} device(s) discovered on your network.{% endif %}</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <a href="/export/devices.csv" class="btn btn-secondary btn-sm">Export CSV</a>
@@ -106,26 +107,24 @@
             {{ d.last_seen|local('%d %b %H:%M') if d.last_seen else '—' }}
           </td>
           <td>
-            <span class="badge badge-{{ 'yellow' if d.state == 'NEW' else ('green' if d.state == 'APPROVED' else ('red' if d.state == 'BLOCKED' else 'blue')) }}">
-              {{ d.state }}
-            </span>
+            {{ ui.device_access(d, enforcing, can_control, hold_new, compact=True) }}
           </td>
           <td style="text-align:right;padding-right:14px">
             <div style="display:flex;gap:4px;justify-content:flex-end">
               {% if user.is_admin %}
               {% if d.state != 'APPROVED' and d.state != 'BLOCKED' %}
-              <button class="btn btn-success btn-sm btn-icon" title="Approve"
+              <button class="btn btn-success btn-sm btn-icon" title="I know this device: give it a name and an owner"
                       onclick="openApprove({{ d.device_id }}, '{{ d.mac_address }}', '{{ d.hostname or '' }}')">Approve</button>
               {% endif %}
-              {% if enforcing and d.state != 'BLOCKED' %}
+              {% if enforcing and d.state != 'BLOCKED' and not (d.state == 'NEW' and hold_new) %}{# a held new device has no internet to cut: Approve is its only decision #}
               <form method="post" action="/devices/{{ d.device_id }}/block"
                     onsubmit="return confirm('Block {{ d.mac_address }}?')">
-                <button class="btn btn-danger btn-sm btn-icon" title="Block">Block</button>
+                <button class="btn btn-danger btn-sm btn-icon" title="Cut this device off the network">Block</button>
               </form>
               {% elif d.state == 'BLOCKED' %}
               <form method="post" action="/devices/{{ d.device_id }}/unblock"
                     onsubmit="return confirm('Let {{ d.mac_address }} back onto the network?')">
-                <button class="btn btn-success btn-sm btn-icon" title="Unblock">Unblock</button>
+                <button class="btn btn-success btn-sm btn-icon" title="Let this device use the network again">Unblock</button>
               </form>
               {% endif %}
               {% endif %}
@@ -139,8 +138,13 @@
             <div class="empty-state">
               
               {% if user.is_admin %}
+              {% if 'discovery' in unavailable %}
+              <h4>Devices cannot be found on this computer</h4>
+              <p>{{ unavailable['discovery'].reason }}. See the note at the top of this page.</p>
+              {% else %}
               <h4>No devices discovered yet</h4>
               <p>Clarinet finds devices by scanning the network every 15 seconds. If this stays empty, check the network interface in Settings.</p>
+              {% endif %}
               {% else %}
               <h4>No devices of yours yet</h4>
               <p>Open this page from the phone or computer you want to add. Clarinet will offer to add it, and an administrator confirms.</p>

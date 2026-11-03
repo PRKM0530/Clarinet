@@ -7,7 +7,7 @@ so the APScheduler thread writing traffic counters never blocks the
 web worker responding to the dashboard.
 """
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from clarinet.config import settings

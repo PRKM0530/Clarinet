@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from clarinet import templates
-from clarinet.auth import require_admin, require_login
+from clarinet.auth import require_admin
 from clarinet.database import get_db
 
 router = APIRouter(tags=["status"])
@@ -96,6 +96,9 @@ def status_page(request: Request, db: Session = Depends(get_db)):
     from clarinet.app_settings import get_setting
     from clarinet.core_svc.mode import parse_mode, mode_word, network_word, can_enforce
     from clarinet.core_svc.limit_service import get_limit_summary
+    from datetime import datetime, timedelta, timezone
+    from clarinet.core_svc import capabilities
+    from clarinet.models import PingRecord
     from clarinet.core_svc.system_status import human_duration, snapshot
     from clarinet.models import Alert, Device
 
@@ -113,6 +116,13 @@ def status_page(request: Request, db: Session = Depends(get_db)):
     except Exception:
         limit = None
 
+    now_utc = datetime.now(timezone.utc)
+    latency: dict[str, list] = {}
+    for r in (db.query(PingRecord).filter(PingRecord.measured_at >= now_utc - timedelta(hours=3), PingRecord.avg_ms.isnot(None))
+              .order_by(PingRecord.measured_at.asc()).all()):
+        at = r.measured_at if r.measured_at.tzinfo else r.measured_at.replace(tzinfo=timezone.utc)
+        latency.setdefault(r.target, []).append({"x": round(-(now_utc - at).total_seconds() / 60, 1), "y": r.avg_ms})
+
     return templates.TemplateResponse("status/index.html", {
         "request": request,
         "user": user,
@@ -129,6 +139,8 @@ def status_page(request: Request, db: Session = Depends(get_db)):
         "iface": get_setting(db, "network_interface") or "—",
         "router_ip": get_setting(db, "router_ip") or "—",
         "system": snapshot(db),
+        "features": capabilities.features(),
+        "latency": latency,
         "human_duration": human_duration,
     })
 

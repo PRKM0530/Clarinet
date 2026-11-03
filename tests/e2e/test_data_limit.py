@@ -3,7 +3,9 @@ USG-05: the monthly data limit - alerts at each level, billing period rollover, 
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
+
+from clarinet.core_svc.localtime import local_today
 
 import pytest
 
@@ -29,9 +31,9 @@ def world():
 def use(world, megabytes, day=None):
     from clarinet.database import SessionLocal
     from clarinet.models import UsageRecord
-    day = day or date.today()
+    day = day or local_today()
     with SessionLocal() as db:
-        db.add(UsageRecord(device_id=world["d_alice"], date=day.isoformat(), hour=3, bytes_in=megabytes * MB, bytes_out=0))
+        db.add(UsageRecord(device_id=world["d_alice"], date=day.isoformat(), hour=12, bytes_in=megabytes * MB, bytes_out=0))
         db.commit()
 
 
@@ -51,7 +53,7 @@ def alert_types():
 
 def first_of_month_billing():
     # a billing day of 1 means the period starts on the 1st: today is always inside it
-    return date.today().replace(day=1)
+    return local_today().replace(day=1)
 
 
 @pytest.mark.parametrize("mb,expected", [
@@ -93,7 +95,7 @@ def test_usg05_usage_before_the_billing_period_is_not_counted(world):
 @pytest.mark.parametrize("billing_day", [1, 28])
 def test_usg05_period_boundaries_for_billing_days_1_and_28(world, billing_day):
     from clarinet.core_svc.timeutil import billing_period_end, billing_period_start
-    today = date.today()
+    today = local_today()
     start, end = billing_period_start(billing_day, today), billing_period_end(billing_day, today)
     assert start <= today <= end and start.day == billing_day
 
@@ -121,7 +123,7 @@ def test_shared_usage_does_not_raise_high_usage(world):
     from clarinet.models import Alert, UsageRecord
     use(world, 40)
     with SessionLocal() as db:
-        db.add(UsageRecord(device_id=world["d_bob"], date=date.today().isoformat(), hour=4, bytes_in=40 * MB, bytes_out=0))
+        db.add(UsageRecord(device_id=world["d_bob"], date=local_today().isoformat(), hour=12, bytes_in=40 * MB, bytes_out=0))
         db.commit()
     run_check()
     with SessionLocal() as db:

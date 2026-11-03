@@ -7,9 +7,10 @@ Lazily imports M3's slowdowns_between to avoid hard coupling.
 """
 
 from __future__ import annotations
+from clarinet.core_svc.localtime import local_today
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy import func
@@ -65,7 +66,7 @@ def build_daily_summary(db: Session, target_date: date | None = None) -> DailySu
     from clarinet.models import Alert, Device, UsageRecord
 
     if target_date is None:
-        target_date = date.today() - timedelta(days=1)
+        target_date = local_today() - timedelta(days=1)
 
     day_str = target_date.isoformat()
 
@@ -136,7 +137,7 @@ def build_weekly_summary(db: Session, week_end: date | None = None) -> WeeklySum
     from clarinet.models import Alert, Device, SlowdownEvent, UsageRecord
 
     if week_end is None:
-        week_end = date.today() - timedelta(days=1)
+        week_end = local_today() - timedelta(days=1)
 
     week_start = week_end - timedelta(days=6)
     start_str = week_start.isoformat()

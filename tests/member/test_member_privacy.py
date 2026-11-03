@@ -53,10 +53,10 @@ def world():
                        owner_member_id=bob.member_id, first_seen=now, last_seen=now)
         db.add_all([d_alice, d_bob])
         db.flush()
-        today = date.today().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         db.add_all([
-            UsageRecord(device_id=d_alice.device_id, date=today, hour=9, bytes_in=5_000_000, bytes_out=1_000_000),
-            UsageRecord(device_id=d_bob.device_id, date=today, hour=10, bytes_in=int(BOB_BYTES), bytes_out=1),
+            UsageRecord(device_id=d_alice.device_id, date=today, hour=datetime.now(timezone.utc).hour, bytes_in=5_000_000, bytes_out=1_000_000),
+            UsageRecord(device_id=d_bob.device_id, date=today, hour=datetime.now(timezone.utc).hour, bytes_in=int(BOB_BYTES), bytes_out=1),
             PriorityGrant(device_id=d_bob.device_id, member_id=bob.member_id, decision="PENDING", requested_at=now),
             AuditLog(actor_id=boss.member_id, action="BLOCK_DEVICE", detail_json=f'{{"note": "{AUDIT_NOTE}"}}'),
             Alert(level="CRITICAL", type="ARP_SPOOF", title=SECURITY_ALERT, message="router impersonated"),
@@ -107,8 +107,8 @@ def test_dashboard_only_counts_the_members_own_devices(world):
     assert SECURITY_ALERT not in body
 
 
-def test_admin_dashboard_sees_the_whole_network(world):
-    body = login("boss", "pw-boss-1").get("/dashboard").text
+def test_admin_device_list_sees_the_whole_network(world):
+    body = login("boss", "pw-boss-1").get("/devices").text
     assert "ALICE-LAPTOP" in body and BOB_DEVICE in body
 
 
@@ -160,8 +160,9 @@ def test_priority_page_hides_other_members_requests(world):
 
 def test_audit_log_is_admin_only(world):
     client = login("alice", "pw-alice-1")
-    r = client.get("/security/summary")
-    assert r.status_code in (302, 403)
-    page = client.get("/security")            # members get their own, smaller Security page
-    assert page.status_code == 200 and AUDIT_NOTE not in page.text
+    assert client.get("/security/summary").status_code in (302, 403)
+    r = client.get("/security")                      # members have no Security page: they are sent to their account
+    assert r.status_code == 302 and r.headers["location"] == "/account"
     assert AUDIT_NOTE in login("boss", "pw-boss-1").get("/security").text
+
+

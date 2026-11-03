@@ -21,7 +21,6 @@ from __future__ import annotations
 from clarinet.core_svc.localtime import configured_zone
 import json
 import logging
-import subprocess
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
@@ -74,7 +73,7 @@ table {NFT_TABLE} {{
 }}
 """
     # nft add table is idempotent; chains may already exist → use 'add' not 'create'
-    result = _nft_run(["nft", "add", "table", NFT_TABLE])
+    _nft_run(["nft", "add", "table", NFT_TABLE])
     _nft_run(["nft", "add", "chain", NFT_TABLE, NFT_CHAIN_BLOCK,
               "{ type filter hook forward priority 0; policy accept; }"])
     _nft_run(["nft", "add", "chain", NFT_TABLE, NFT_CHAIN_GUEST,
@@ -310,9 +309,9 @@ def apply_time_rules() -> None:
         iface = get_setting(db, "network_interface", "")
         plan_dl = get_setting(db, "plan_download_mbps", "100")
         try:
-            plan_kbps = int(float(plan_dl) * 1000)
+            int(float(plan_dl) * 1000)
         except ValueError:
-            plan_kbps = 100_000
+            pass
 
         # Build a map: device_id → list of active rules applying now
         rules = (

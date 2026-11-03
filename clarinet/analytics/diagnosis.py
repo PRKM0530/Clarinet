@@ -195,7 +195,7 @@ def _diagnose(
     Returns (causes_list, raw_metrics_dict).
     Each cause: {cause, confidence: likely|possible, evidence, suggestion}
     """
-    from clarinet.analytics.device_load import get_device_bytes, total_bytes
+    from clarinet.analytics.device_load import get_device_bytes
     from clarinet.analytics.baseline import latency_is_elevated
 
     router_ms = (router_ping.avg_ms or 0) if router_ping else 0.0
@@ -317,7 +317,7 @@ def _device_name(db, mac: str) -> str:
 def _get_last_dns_ms(db) -> float | None:
     """Return the last stored DNS latency measurement."""
     try:
-        from clarinet.collector.dns_timer import average_dns_ms, measure_dns
+        from clarinet.collector.dns_timer import average_dns_ms
         # Use cached results if available (dns_timer stores them)
         from clarinet.collector import dns_timer as _dt
         if hasattr(_dt, "_last_results") and _dt._last_results:

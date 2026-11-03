@@ -274,7 +274,6 @@ def _record_fairness_used(db, member_id: int, minutes: int) -> None:
     """Update fairness credit for the day."""
     try:
         from clarinet.models.guest import FairnessCredit
-        from clarinet.app_settings import get_setting
         from zoneinfo import ZoneInfo
         from datetime import datetime
 

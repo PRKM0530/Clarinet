@@ -1,10 +1,11 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% import "_modes.html" as modes %}
 {% block title %}Time Rules{% endblock %}
 {% block page_title %}Time Rules{% endblock %}
 {% from "_ui.html" import os_banner %}
 {% block content %}
-{% if enforcing and not can_control %}{{ os_banner("Time rules") }}{% endif %}
+{% if user.is_admin %}{{ ui.access_tabs('rules') }}{% endif %}
 {% if not enforcing %}
 {{ modes.needs_full('Time rules', user, net_mode) }}
 {% else %}
@@ -14,9 +15,10 @@
       <h2>Time Rules</h2>
       <p>Schedule internet access restrictions per device.</p>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">{{ ui.control_pill(enforcing, can_control) }}
     <button class="btn btn-primary" onclick="openModal('create-rule-modal')">
       New Rule
-    </button>
+    </button></div>
   </div>
 </div>
 

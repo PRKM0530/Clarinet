@@ -11,6 +11,7 @@ Operations:
 """
 
 from __future__ import annotations
+from clarinet.core_svc.localtime import local_today
 
 import logging
 from datetime import datetime, timedelta
@@ -53,9 +54,8 @@ def purge_old_login_attempts(db: Session, days: int = 30) -> int:
 def purge_old_usage(db: Session, days: int = 90) -> int:
     """Delete UsageRecord rows older than `days` days."""
     try:
-        from datetime import date
         from clarinet.models import UsageRecord
-        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        cutoff = (local_today() - timedelta(days=days)).isoformat()
         count = db.query(UsageRecord).filter(UsageRecord.date < cutoff).delete()
         db.commit()
         log.debug("Purged %d old usage records", count)

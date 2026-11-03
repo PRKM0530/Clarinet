@@ -8,12 +8,11 @@ Public API:
 """
 
 from __future__ import annotations
+from clarinet.core_svc.localtime import local_today
 
 import logging
 from dataclasses import dataclass
-from datetime import date
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 log = logging.getLogger("clarinet.core_svc.limit")
@@ -65,10 +64,9 @@ def get_limit_summary(db: Session) -> LimitSummary:
         days_remaining_in_period,
         period_fraction_elapsed,
     )
-    from clarinet.models import UsageRecord
 
     bday = get_billing_day(db)
-    today = date.today()
+    today = local_today()
     period_start = billing_period_start(bday, today)
     period_end = billing_period_end(bday, today)
     days_left = days_remaining_in_period(bday, today)
@@ -78,14 +76,8 @@ def get_limit_summary(db: Session) -> LimitSummary:
     end_str = period_end.isoformat()
 
     # Sum all usage in the current billing period
-    bytes_used = (
-        db.query(func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out))
-        .filter(
-            UsageRecord.date >= start_str,
-            UsageRecord.date <= today.isoformat(),
-        )
-        .scalar()
-    ) or 0
+    from clarinet.core_svc.usage_service import bytes_between
+    bytes_used = bytes_between(db, start_str, today.isoformat())
 
     bytes_lim = limit_bytes(db)
     warn_pct = limit_warn_pct(db)
@@ -123,11 +115,11 @@ def get_limit_summary(db: Session) -> LimitSummary:
 
 def _flag_heavy_devices(db: Session, summary) -> None:
     """HIGH_USAGE: a single device has used more than half of the whole monthly limit."""
-    from sqlalchemy import func
     from clarinet.core_svc.alerts import raise_alert
-    from clarinet.models import Device, UsageRecord
-    rows = (db.query(UsageRecord.device_id, func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out))
-            .filter(UsageRecord.date >= summary.period_start).group_by(UsageRecord.device_id).all())
+    from clarinet.models import Device
+    from clarinet.core_svc.localtime import local_today
+    from clarinet.core_svc.usage_service import bytes_by_device
+    rows = bytes_by_device(db, str(summary.period_start), local_today().isoformat()).items()
     for device_id, total in rows:
         if total and total > summary.bytes_limit * 0.5:
             device = db.get(Device, device_id)

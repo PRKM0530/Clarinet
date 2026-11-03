@@ -19,7 +19,6 @@ Filters map device MACs → class handles.
 
 import logging
 import subprocess
-from dataclasses import dataclass
 
 log = logging.getLogger("clarinet.enforcer.tc")
 

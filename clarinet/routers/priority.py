@@ -59,7 +59,6 @@ def _fairness_credit_today(db, member_id: int) -> int:
     """Return minutes of priority used today by this member."""
     try:
         from clarinet.models.guest import FairnessCredit
-        from clarinet.app_settings import get_setting
         from zoneinfo import ZoneInfo
         tz = ZoneInfo(configured_zone(db))
         today = datetime.now(tz).strftime("%Y-%m-%d")

@@ -85,6 +85,16 @@ def to_local(value: datetime | None) -> datetime | None:
     return value.astimezone(tz())
 
 
+def now_local() -> datetime:
+    """The current moment in the configured zone."""
+    return datetime.now(timezone.utc).astimezone(tz())
+
+
+def local_today():
+    """Today's date in the configured zone. Usage is stored by this date, so "today" always means the same day."""
+    return now_local().date()
+
+
 def local_filter(value, fmt: str = "%d %b %H:%M") -> str:
     """Jinja filter: {{ alert.raised_at|local('%H:%M') }}"""
     local = to_local(value)

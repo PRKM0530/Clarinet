@@ -62,7 +62,7 @@ def test_speed_page_tells_the_truth_about_a_failed_test():
         db.add(SpeedTestResult(tested_at=datetime.now(timezone.utc), download_mbps=0, upload_mbps=0,
                                latency_ms=0, busy=False, below_plan=False, server_host="failed"))
         db.commit()
-    page = new_client(ADMIN).get("/speed").text
+    page = new_client(ADMIN).get("/speed?view=internet").text
     assert "did not finish" in page
 
 
@@ -92,10 +92,11 @@ def test_slowdowns_page_points_to_settings_instead_of_repeating_them():
     assert "Settings, then Advanced" in page
 
 
-def test_reports_open_on_today():
+def test_the_old_reports_address_goes_to_usage():
     seed_world("MONITOR")
     r = new_client(ADMIN).get("/reports")
-    assert r.status_code == 200
+    assert r.status_code == 301 and r.headers["location"].startswith("/usage?period=")
+    assert new_client(ADMIN).get("/reports?view=day").headers["location"] == "/usage?period=today"
 
 
 # ── Phase 5: discovery, guests, and Public-mode quarantine ─────────────────────────────────────────────────
@@ -163,7 +164,7 @@ def test_vouchers_are_offered_while_new_devices_are_held(monkeypatch):
     seed_world("FULL")
     _hold_new_devices()
     c = new_client(ADMIN)
-    assert 'href="/vouchers"' in c.get("/dashboard").text
+    assert 'href="/rules"' in c.get("/dashboard").text and 'href="/vouchers"' in c.get("/rules").text
     assert "needs Full Control mode" not in c.get("/vouchers").text
 
 

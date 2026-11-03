@@ -412,7 +412,7 @@ def test_speed_tests_are_offered_whatever_the_mode(db):
     for mode in ("MONITOR", "FULL"):
         db.merge(Settings(key="network_mode", value=mode))
         db.commit()
-        assert "Run speed test" in admin().get("/speed").text
+        assert "Run speed test" in admin().get("/speed?view=internet").text
 
 
 def test_the_mode_is_defined_in_one_place():

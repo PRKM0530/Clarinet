@@ -93,8 +93,8 @@ def seed_world(mode: str = "FULL") -> dict:
         db.add_all([d1, d2, d3, d4])
         db.flush()
         db.add_all([
-            UsageRecord(device_id=d1.device_id, date=today, hour=9, bytes_in=5_000_000, bytes_out=1_000_000),
-            UsageRecord(device_id=d2.device_id, date=today, hour=10, bytes_in=7_777_000, bytes_out=1),
+            UsageRecord(device_id=d1.device_id, date=today, hour=now.hour, bytes_in=5_000_000, bytes_out=1_000_000),
+            UsageRecord(device_id=d2.device_id, date=today, hour=now.hour, bytes_in=7_777_000, bytes_out=1),
             Alert(level="WARNING", type="SLOWDOWN", title="ALICE-ALERT", message="x", device_id=d1.device_id),
             Alert(level="WARNING", type="SLOWDOWN", title="BOB-ALERT", message="x", device_id=d2.device_id),
             Alert(level="CRITICAL", type="ARP_SPOOF", title="SECRET-SECURITY-ALERT", message="x"),

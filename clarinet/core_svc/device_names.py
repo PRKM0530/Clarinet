@@ -16,6 +16,23 @@ def device_name(device) -> str:
     return mac or "Unknown device"
 
 
+def is_saved(device) -> bool:
+    """A device someone has dealt with: approved, given a name, or assigned to a member. Unknown ones are not."""
+    return (getattr(device, "state", None) == "APPROVED"
+            or bool((getattr(device, "label", None) or "").strip())
+            or getattr(device, "owner_member_id", None) is not None)
+
+
+def saved_first(devices):
+    """Saved devices on top; inside each group, the most recently seen first."""
+    from datetime import datetime, timezone
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    def seen(d):
+        t = getattr(d, "last_seen", None) or floor
+        return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+    return sorted(devices, key=lambda d: (0 if is_saved(d) else 1, -seen(d).timestamp()))
+
+
 def device_mono(device) -> str:
     """Up to two capital letters from the name, for the small square that stands for the device."""
     words = [w for w in device_name(device).replace("-", " ").replace("_", " ").split() if any(c.isalnum() for c in w)]

@@ -35,13 +35,15 @@ def test_features_that_need_full_control_are_hidden_outside_it(mode):
             assert "needs Full Control mode" in body, f"{who[0]} on {path} in {mode}"
 
 
-def test_in_full_control_everything_is_offered():
+def test_in_full_control_everything_is_offered(monkeypatch):
     seed_world("FULL")
     admin = new_client(ADMIN).get("/dashboard").text
-    for path, _ in FULL_ONLY:
-        assert f'href="{path}"' in admin
+    assert 'href="/rules"' in admin                               # "Access", which holds the three tabs
+    rules = new_client(ADMIN).get("/rules").text
+    for path, _ in FULL_ONLY[1:]:
+        assert f'href="{path}"' in rules
     assert 'href="/priority"' in new_client(ALICE).get("/dashboard").text
-    assert "needs Full Control" not in new_client(ADMIN).get("/rules").text
+    assert "needs Full Control" not in rules
 
 
 @pytest.mark.parametrize("path", ["/rules", "/vouchers", "/priority"])
@@ -77,12 +79,15 @@ def test_a_blocked_device_can_always_be_released_even_in_monitor_mode():
 
 
 # Full Control that cannot change the network says so
-def test_full_control_without_permission_shows_a_warning_to_admins_only(monkeypatch):
+def test_full_control_without_permission_says_so_next_to_the_action(monkeypatch):
+    from clarinet.core_svc import netinfo
     seed_world("FULL")
-    monkeypatch.setattr("clarinet.core_svc.enforcement_status.problem", lambda: "Clarinet is not running as root, so it is not allowed to change the firewall")
-    admin = new_client(ADMIN).get("/dashboard").text
-    assert "Full Control cannot change the network right now" in admin and "not running as root" in admin
-    assert "cannot change the network right now" not in new_client(ALICE).get("/dashboard").text
+    monkeypatch.setattr(netinfo, "can_control_cached", lambda *a, **k: False)
+    rules = new_client(ADMIN).get("/rules").text
+    assert "Linux required" in rules and "has no effect on this computer" in rules
+    assert "has no effect on this computer" not in new_client(ALICE).get("/dashboard").text
+    monkeypatch.setattr(netinfo, "can_control_cached", lambda *a, **k: True)
+    assert "has no effect on this computer" not in new_client(ADMIN).get("/rules").text
 
 
 def test_blocking_without_permission_does_not_claim_success(monkeypatch):
@@ -91,7 +96,7 @@ def test_blocking_without_permission_does_not_claim_success(monkeypatch):
     r = new_client(ADMIN).post(f"/devices/{world['d_free']}/block")
     assert "info=blocked_pending" in r.headers["location"]
     page = new_client(ADMIN).get(r.headers["location"]).text
-    assert "cannot change the network right now" in page and "Device blocked." not in page
+    assert "not active yet" in page and "can still use the internet" in page and "Device blocked." not in page
 
 
 def test_blocking_with_permission_says_blocked():
@@ -108,17 +113,19 @@ def test_priority_without_permission_does_not_claim_success(monkeypatch):
 
 
 # Speed and slowdowns for members
-def test_members_can_read_speed_results_but_not_run_or_export():
+def test_the_router_speed_test_is_for_administrators_only():
     seed_world("FULL")
-    page = new_client(ALICE).get("/speed").text
-    assert "Run speed test" not in page and "Export CSV" not in page and "Report for your provider" not in page
-    assert "Run speed test" in new_client(ADMIN).get("/speed").text
+    member = new_client(ALICE)
+    for url in ("/speed", "/speed?view=internet"):
+        page = member.get(url).text
+        assert "Run speed test" not in page and "Export CSV" not in page and "Report for your provider" not in page
+    assert "Run speed test" in new_client(ADMIN).get("/speed?view=internet").text
 
 
 def test_speed_test_button_is_offered_in_every_mode():
     for mode in ("FULL", "MONITOR"):
         seed_world(mode)
-        assert "Run speed test" in new_client(ADMIN).get("/speed").text
+        assert "Run speed test" in new_client(ADMIN).get("/speed?view=internet").text
 
 
 def test_member_cannot_use_the_speed_actions():

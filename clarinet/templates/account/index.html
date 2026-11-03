@@ -66,4 +66,26 @@
   </div>
 </div>
 {% endif %}
+
+<div class="card" style="max-width:480px;margin-top:20px">
+  <div class="card-header"><span class="card-header-title">Sign-ins</span></div>
+  <div class="card-body">
+    <p>{{ sessions|length }} active sign-in{{ 's' if sessions|length != 1 else '' }}.
+      {% if sessions|length > 1 %}End the ones you are not using.{% endif %}</p>
+    {% if sessions|length > 1 %}
+    <form method="post" action="/account/sign-out-others"><button type="submit" class="btn btn-secondary">Sign out other devices</button></form>
+    {% endif %}
+    {% if sign_ins %}
+    <table class="cl-table" style="margin-top:12px"><tbody>
+      {% for s in sign_ins %}
+      <tr><td>{% if s.success %}Signed in{% else %}<span class="muted">Wrong password</span>{% endif %}</td>
+          <td class="mono">{{ s.ip_address }}</td><td class="num muted">{{ s.attempted_at|local('%d %b %H:%M') }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+    {% if failed_recently %}<p class="muted" style="margin-top:10px">{{ failed_recently }} recent attempt{{ 's' if failed_recently != 1 else '' }} used a wrong password. If that was not you, change your password.</p>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<p class="muted" style="margin-top:20px"><a href="/privacy">What Clarinet records about you</a></p>
 {% endblock %}

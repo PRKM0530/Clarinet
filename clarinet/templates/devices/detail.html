@@ -1,4 +1,5 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}{{ device.label or device.mac_address }}{% endblock %}
 {% block page_title %}
 <span style="display:flex;align-items:center;gap:10px">
@@ -16,9 +17,7 @@
     <div class="card-header">
       
       <span class="card-header-title">Device Info</span>
-      <span class="badge badge-{{ 'green' if device.state == 'APPROVED' else ('red' if device.state == 'BLOCKED' else 'yellow') }}" style="margin-left:auto">
-        {{ device.state }}
-      </span>
+      <span style="margin-left:auto;text-align:right">{{ ui.device_access(device, enforcing, can_control, hold_new) }}</span>
     </div>
     <div class="card-body">
       {% macro row(label, value) %}
@@ -169,7 +168,7 @@
   </form>
   {% endif %}
   {% if user.is_admin %}
-  {% if enforcing and device.state != 'BLOCKED' %}
+  {% if enforcing and device.state != 'BLOCKED' and not (device.state == 'NEW' and hold_new) %}
   <form method="post" action="/devices/{{ device.device_id }}/block"
         onsubmit="return confirm('Block this device?')">
     <button class="btn btn-danger">Block Device</button>

@@ -6,7 +6,7 @@ All endpoints require a valid session cookie (same auth as HTML pages).
 Prefix: /api/v1
 """
 
-from datetime import date, timedelta, datetime, timezone
+from datetime import timedelta, datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -17,7 +17,7 @@ from clarinet.auth import require_login, require_admin
 from clarinet.database import get_db
 from clarinet.models import (
     Alert, Device, SlowdownEvent, SpeedTestResult,
-    UsageRecord, PingRecord,
+    PingRecord,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["api"])
@@ -64,11 +64,10 @@ def api_status(request: Request, db: Session = Depends(get_db)):
 
     active_slowdown = db.query(SlowdownEvent).filter(SlowdownEvent.ended_at == None).first()
 
-    today = date.today().isoformat()
-    traffic = db.query(func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out)).filter(UsageRecord.date == today)
-    if own_ids is not None:
-        traffic = traffic.filter(UsageRecord.device_id.in_(own_ids))
-    today_bytes = traffic.scalar() or 0
+    from clarinet.core_svc.localtime import local_today
+    from clarinet.core_svc.usage_service import bytes_between
+    today = local_today().isoformat()
+    today_bytes = bytes_between(db, today, today, own_ids)
 
     from clarinet.core_svc.speed_filters import valid_only
     latest_speed = valid_only(db.query(SpeedTestResult)).order_by(SpeedTestResult.tested_at.desc()).first()
@@ -206,36 +205,24 @@ def api_usage_today(request: Request, db: Session = Depends(get_db)):
     if err:
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    today = date.today().isoformat()
-    q = (
-        db.query(
-            Device.device_id,
-            Device.label,
-            Device.hostname,
-            Device.mac_address,
-            Device.state,
-            func.sum(UsageRecord.bytes_in).label("bytes_in"),
-            func.sum(UsageRecord.bytes_out).label("bytes_out"),
-        )
-        .join(UsageRecord, Device.device_id == UsageRecord.device_id)
-        .filter(UsageRecord.date == today)
-        .group_by(Device.device_id)
-        .order_by(func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out).desc())
-    )
-    if not user.is_admin:
-        q = q.filter(Device.owner_member_id == user.member_id)
-
-    rows = q.all()
+    from clarinet.core_svc.localtime import local_today
+    from clarinet.core_svc.usage_service import usage_range
+    today = local_today().isoformat()
+    usage = usage_range(db, user, today, today)          # the viewer's own today; members only see their devices
+    devices = ({d.device_id: d for d in db.query(Device).filter(Device.device_id.in_(list(usage.by_device)))}
+               if usage.by_device else {})
+    rows = sorted(((devices[i], bi, bo) for i, (bi, bo) in usage.by_device.items() if i in devices),
+                  key=lambda r: r[1] + r[2], reverse=True)
     return [
         {
-            "device_id": r.device_id,
-            "name": r.label or r.hostname or r.mac_address,
-            "state": r.state,
-            "bytes_in": r.bytes_in or 0,
-            "bytes_out": r.bytes_out or 0,
-            "total_mb": round(((r.bytes_in or 0) + (r.bytes_out or 0)) / 1_048_576, 2),
+            "device_id": d.device_id,
+            "name": d.label or d.hostname or d.mac_address,
+            "state": d.state,
+            "bytes_in": bi or 0,
+            "bytes_out": bo or 0,
+            "total_mb": round(((bi or 0) + (bo or 0)) / 1_048_576, 2),
         }
-        for r in rows
+        for d, bi, bo in rows
     ]
 
 

@@ -96,6 +96,7 @@ def _validate_settings(params: dict) -> str | None:
         ("plan_upload_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
         ("billing_day", lambda v: _number(v, 1, 28, whole=True) is not None, "bad_billing_day"),
         ("speed_test_interval_hours", lambda v: _number(v, 1, 168, whole=True) is not None, "bad_interval"),
+        ("device_test_interval_minutes", lambda v: _number(v, 15, 1440, whole=True) is not None, "bad_device_interval"),
         ("slowdown_latency_multiplier", lambda v: _number(v, 1.0, 20.0) is not None, "bad_multiplier"),
         ("slowdown_speed_threshold", lambda v: _number(v, 0.05, 1.0) is not None, "bad_threshold_ratio"),
     ]
@@ -120,6 +121,7 @@ def update_settings(
     monthly_limit_gb: Optional[str]   = Form(None),
     speed_threshold_pct: Optional[str] = Form(None),
     speed_test_interval_hours: Optional[str] = Form(None),
+    device_test_interval_minutes: Optional[str] = Form(None),
     slowdown_latency_multiplier: Optional[str] = Form(None),
     slowdown_speed_threshold: Optional[str]    = Form(None),
     router_ip: Optional[str] = Form(None),
@@ -139,6 +141,7 @@ def update_settings(
         "plan_upload_mbps": plan_upload_mbps,
         "billing_day": billing_day,
         "speed_test_interval_hours": speed_test_interval_hours,
+        "device_test_interval_minutes": device_test_interval_minutes,
         "slowdown_latency_multiplier": slowdown_latency_multiplier,
         "slowdown_speed_threshold": slowdown_speed_threshold,
     }

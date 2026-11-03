@@ -1,4 +1,5 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Security{% endblock %}
 {% block page_title %}Security{% endblock %}
 {% from "_ui.html" import linux_pill %}
@@ -56,7 +57,7 @@
 <div class="card" style="margin-bottom:20px">
   <div class="card-header">
     
-    <span class="card-header-title">Wi-Fi Access Points</span>
+    <span class="card-header-title">Wi-Fi Access Points</span>{{ ui.feature_pill(unavailable, 'wifi') }}
     <span class="card-header-sub">{{ trusted_aps|length }} trusted</span>
     <form method="post" action="/security/wifi/scan" style="margin-left:auto">
       <button class="btn btn-secondary btn-sm" type="submit">Scan now</button>
@@ -142,76 +143,6 @@
   </div>
 </div>
 
-<div class="two-col" style="margin-bottom:20px">
-
-  <!-- Random MAC devices -->
-  <div class="card">
-    <div class="card-header">
-      
-      <span class="card-header-title">Randomised MAC Devices</span>
-    </div>
-    <div class="table-wrap">
-      <table class="cl-table">
-        <thead><tr><th>Device</th><th>Last seen</th><th>State</th></tr></thead>
-        <tbody>
-          {% for d in random_mac_devices %}
-          <tr>
-            <td>
-              <a href="/devices/{{ d.device_id }}" style="font-weight:500;color:var(--text)">
-                {{ d.label or d.mac_address }}
-              </a>
-              <div style="font-size:11px;color:var(--text-3)">Randomised MAC</div>
-            </td>
-            <td style="font-size:12px;color:var(--text-3)">{{ d.last_seen|local('%d %b %H:%M') if d.last_seen else '—' }}</td>
-            <td><span class="badge badge-{{ 'green' if d.state == 'APPROVED' else ('red' if d.state == 'BLOCKED' else 'yellow') }}">{{ d.state }}</span></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="3">
-            <div class="empty-state" style="padding:28px">
-              
-              <h4>None detected</h4>
-            </div>
-          </td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Security alerts -->
-  <div class="card">
-    <div class="card-header">
-      
-      <span class="card-header-title">Security Alerts</span>
-    </div>
-    <div class="table-wrap">
-      <table class="cl-table">
-        <thead><tr><th>Alert</th><th>Device</th><th>Time</th></tr></thead>
-        <tbody>
-          {% for a in sec_alerts %}
-          <tr>
-            <td>
-              <span class="live-dot {{ 'critical pulse' if a.level == 'CRITICAL' else 'warning' }}" style="display:inline-block;margin-right:6px"></span>
-              {{ a.title }}
-            </td>
-            <td style="font-size:12.5px;color:var(--text-2)">{{ a.device.label or a.device.mac_address if a.device else '—' }}</td>
-            <td style="font-size:12px;color:var(--text-3)">{{ a.raised_at|local('%H:%M') }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="3">
-            <div class="empty-state" style="padding:28px">
-              
-              <h4>No security alerts</h4>
-            </div>
-          </td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
-
 <!-- Audit log -->
 <div class="card">
   <div class="card-header">
@@ -249,13 +180,13 @@
 </div>
 
 <section class="section">
-  <div class="micro section-label">Detection that needs Linux</div>
+  <div class="micro section-label">What detection is working here</div>
   <div class="card">
     <table class="cl-table">
       <tbody>
-        <tr><td>ARP spoofing</td><td class="muted">Notices a device pretending to be another, such as your router.</td><td class="num">{% if not linux_ok %}{{ linux_pill() }}{% else %}<span class="pill pill-ok">Available</span>{% endif %}</td></tr>
-        <tr><td>Port scans</td><td class="muted">Notices a device probing many ports on the network.</td><td class="num">{% if not linux_ok %}{{ linux_pill() }}{% else %}<span class="pill pill-ok">Available</span>{% endif %}</td></tr>
-        <tr><td>Website lookups</td><td class="muted">Needed to sort usage into streaming, browsing and so on.</td><td class="num">{% if not linux_ok %}{{ linux_pill() }}{% else %}<span class="pill pill-ok">Available</span>{% endif %}</td></tr>
+        <tr><td>ARP spoofing</td><td class="muted">Notices a device pretending to be another, such as your router.</td><td class="num">{% if 'arpspoof' in unavailable %}{{ ui.feature_pill(unavailable, 'arpspoof') }}<div class="muted" style="font-size:12px">{{ unavailable['arpspoof'].reason }}</div>{% else %}<span class="pill pill-ok">Working</span>{% endif %}</td></tr>
+        <tr><td>Port scans</td><td class="muted">Notices a device probing many ports on the network.</td><td class="num">{% if 'portscan' in unavailable %}{{ ui.feature_pill(unavailable, 'portscan') }}<div class="muted" style="font-size:12px">{{ unavailable['portscan'].reason }}</div>{% else %}<span class="pill pill-ok">Working</span>{% endif %}</td></tr>
+        <tr><td>Website lookups</td><td class="muted">Needed to sort usage into streaming, browsing and so on.</td><td class="num">{% if 'lookups' in unavailable %}{{ ui.feature_pill(unavailable, 'lookups') }}<div class="muted" style="font-size:12px">{{ unavailable['lookups'].reason }}</div>{% else %}<span class="pill pill-ok">Working</span>{% endif %}</td></tr>
       </tbody>
     </table>
   </div>

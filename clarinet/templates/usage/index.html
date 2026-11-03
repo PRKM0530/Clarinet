@@ -1,4 +1,5 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% import "_modes.html" as modes %}
 {% from "_ui.html" import linux_pill %}
 {% block title %}Usage{% endblock %}
@@ -25,33 +26,28 @@
 </div>
 
 <div class="stat-grid">
-  <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">{{ usage.total_bytes|size }}</div></div>
-  <div class="stat-card"><div class="stat-label">Download</div><div class="stat-value">{{ usage.bytes_in|size }}</div></div>
-  <div class="stat-card"><div class="stat-label">Upload</div><div class="stat-value">{{ usage.bytes_out|size }}</div></div>
-  {% if fairness is defined and not device %}
-  <div class="stat-card"><div class="stat-label">Fairness</div>
-    <div class="stat-value">{{ fairness.index if fairness.index is not none else '–' }}</div>
-    <div class="stat-meta">{{ fairness.words }}</div></div>
-  {% endif %}
+  <div class="stat-card"><div class="stat-label">Total {{ ui.feature_pill(unavailable, 'usage') }}{{ ui.feature_limit(limited, 'usage') }}</div><div class="stat-value">{% if 'usage' in unavailable %}<span class="muted">n/a</span>{% else %}{{ usage.total_bytes|size }}{% endif %}</div>{% if 'usage' in unavailable and loop_first is not defined %}{% endif %}</div>
+  <div class="stat-card"><div class="stat-label">Download {{ ui.feature_pill(unavailable, 'usage') }}</div><div class="stat-value">{% if 'usage' in unavailable %}<span class="muted">n/a</span>{% else %}{{ usage.bytes_in|size }}{% endif %}</div>{% if 'usage' in unavailable and loop_first is not defined %}{% endif %}</div>
+  <div class="stat-card"><div class="stat-label">Upload {{ ui.feature_pill(unavailable, 'usage') }}</div><div class="stat-value">{% if 'usage' in unavailable %}<span class="muted">n/a</span>{% else %}{{ usage.bytes_out|size }}{% endif %}</div>{% if 'usage' in unavailable and loop_first is not defined %}{% endif %}</div>
 </div>
-{% if no_usage_data is defined and no_usage_data %}
+{% if no_usage_data is defined and no_usage_data and 'usage' not in unavailable %}
 <div class="card" style="margin-bottom:16px"><div class="card-body muted">{{ modes.usage_note(user, net_mode, enforce_problem) }}</div></div>
 {% endif %}
 
 <div class="two-col section">
   <div class="card">
-    <div class="card-header"><span class="card-header-title">Traffic by day</span></div>
+    <div class="card-header"><span class="card-header-title">Traffic by day</span> {{ ui.feature_pill(unavailable, 'usage') }}</div>
     <div class="card-body"><canvas id="dayChart" height="120"></canvas></div>
   </div>
   <div class="card">
-    <div class="card-header"><span class="card-header-title">Traffic by hour of day</span><span class="card-header-sub">UTC</span></div>
+    <div class="card-header"><span class="card-header-title">Traffic by hour of day</span> {{ ui.feature_pill(unavailable, 'usage') }}</div>
     <div class="card-body"><canvas id="hourChart" height="120"></canvas></div>
   </div>
 </div>
 
 <div class="card section">
   <div class="card-header">
-    <span class="card-header-title">What the data was used for</span>{% if not linux_ok %} {{ linux_pill() }}{% endif %}
+    <span class="card-header-title">What the data was used for</span>{{ ui.feature_pill(unavailable, 'lookups') }}
     <span class="card-header-sub">Worked out from the websites looked up, not from what was done on them</span>
   </div>
   <div class="card-body">
@@ -62,27 +58,33 @@
       <span class="bar-value">{{ a.pct|round(0)|int }}%</span>
     </div>
     {% else %}
-    <p class="muted">No breakdown yet. It appears once Clarinet has seen traffic and website lookups, which needs Linux.</p>
+    {% if 'lookups' in unavailable %}<p class="muted">Not available here: {{ unavailable['lookups'].reason if user.is_admin else 'this computer cannot do it' }}.</p>
+    {% else %}<p class="muted">No breakdown yet. It appears once Clarinet has seen traffic and website lookups.</p>{% endif %}
     {% endfor %}
   </div>
 </div>
 
 {% if not device %}
 <div class="card">
-  <div class="card-header"><span class="card-header-title">Per-device totals</span></div>
+  <div class="card-header"><span class="card-header-title">Per-device totals</span> {{ ui.feature_pill(unavailable, 'usage') }}</div>
   <div class="table-wrap">
     <table class="cl-table">
-      <thead><tr><th>Device</th><th class="num">Download</th><th class="num">Upload</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>Device</th>{% if user.is_admin %}<th>Owner</th>{% endif %}<th class="num">Download</th><th class="num">Upload</th><th class="num">Total</th></tr></thead>
       <tbody>
         {% for r in device_rows %}
         <tr>
           <td><a href="/usage/device/{{ r.device.device_id }}?period={{ period }}">{{ r.device|device_name }}</a></td>
+          {% if user.is_admin %}<td>{{ r.owner or '—' }}</td>{% endif %}
+          {% if r.counted %}
           <td class="num">{{ r.bytes_in|size }}</td>
           <td class="num">{{ r.bytes_out|size }}</td>
           <td class="num"><strong>{{ r.total|size }}</strong></td>
+          {% else %}
+          <td class="num" colspan="3"><span class="pill pill-warn" title="Clarinet cannot see this device's traffic from this computer. Counting every device needs Clarinet to run on Linux, on the router.">Needs Linux</span></td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="4" class="muted">No usage was recorded for this period. The collector records traffic in hourly buckets on Linux.</td></tr>
+        <tr><td colspan="{{ 5 if user.is_admin else 4 }}" class="muted">{% if user.is_admin %}No devices found yet.{% else %}You have no devices yet. Open Devices and choose "This is my device".{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -44,15 +44,25 @@ def _page_context(request):
     except Exception:
         pass
     problem = None
+    hold_new = False
     if mode == "FULL":
+        try:
+            from clarinet.core_svc.mode import hold_new_devices
+            with SessionLocal() as db:
+                hold_new = hold_new_devices(db)
+        except Exception:
+            pass
         from clarinet.core_svc.enforcement_status import problem as _problem
         problem = _problem()
     import platform
-    from clarinet.core_svc import netinfo
+    from clarinet.core_svc import capabilities, netinfo
     return {"net_mode": mode, "enforcing": mode == "FULL", "quarantine": mode == "FULL",
             "enforce_problem": problem,
             "linux_ok": platform.system() == "Linux",                 # features that need Linux
-            "can_control": netinfo.can_control_cached()}              # Linux, administrator rights and nftables
+            "can_control": netinfo.can_control_cached(),
+            "hold_new": hold_new,
+            "unavailable": capabilities.unavailable(),
+            "limited": capabilities.limited()}              # {key: Feature} that cannot work on this computer
 
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
@@ -87,6 +97,7 @@ DEFAULT_SETTINGS = {
     "billing_day": str(settings.BILLING_DAY),
     "setup_complete": "false",    # wizard flag
     "speed_test_interval_hours": "6",
+    "device_test_interval_minutes": "60",
     "slowdown_latency_multiplier": str(settings.SLOWDOWN_LATENCY_MULTIPLIER),
     "slowdown_speed_threshold": str(settings.SLOWDOWN_SPEED_THRESHOLD),
 }
@@ -145,6 +156,17 @@ app = FastAPI(
     docs_url="/api/docs" if settings.APP_ENV == "development" else None,
     redoc_url=None,
 )
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """Headers that stop another site framing these pages or a browser guessing file types."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    return response
+
 
 # Signed HttpOnly session cookie
 # max_age=0 → session cookie (expires when browser closes)

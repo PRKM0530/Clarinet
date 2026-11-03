@@ -15,7 +15,7 @@ import shutil
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -58,8 +58,29 @@ def human_duration(seconds: int) -> str:
     return f"{minutes} min" if minutes else "under a minute"
 
 
+def _windows_memory():
+    """(used percent, total bytes) from the Windows memory status call."""
+    import ctypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong), ("total", ctypes.c_ulonglong),
+                    ("avail", ctypes.c_ulonglong), ("total_page", ctypes.c_ulonglong), ("avail_page", ctypes.c_ulonglong),
+                    ("total_virtual", ctypes.c_ulonglong), ("avail_virtual", ctypes.c_ulonglong),
+                    ("avail_extended", ctypes.c_ulonglong)]
+    status = MemoryStatus()
+    status.length = ctypes.sizeof(MemoryStatus)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None, None
+    return int(status.load), int(status.total)
+
+
 def _memory():
-    """(used percent, total bytes) from /proc/meminfo on Linux, else (None, None)."""
+    """(used percent, total bytes): /proc/meminfo on Linux, the memory status call on Windows, else (None, None)."""
+    if platform.system() == "Windows":
+        try:
+            return _windows_memory()
+        except Exception:
+            return None, None
     try:
         values = {}
         for line in Path("/proc/meminfo").read_text().splitlines():

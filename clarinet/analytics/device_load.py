@@ -13,7 +13,7 @@ Used by analytics/diagnosis.py to compute per-device share of traffic.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 log = logging.getLogger("clarinet.analytics.device_load")
 
@@ -56,7 +56,6 @@ def _from_usage_records(window_s: int) -> dict[str, tuple[int, int]]:
     try:
         from clarinet.database import SessionLocal
         from clarinet.models import UsageRecord, Device
-        from datetime import date
 
         now = datetime.now(timezone.utc)
         hour_start = now.replace(minute=0, second=0, microsecond=0)

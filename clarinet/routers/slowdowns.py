@@ -12,9 +12,9 @@ Added (M3):
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -51,7 +51,6 @@ def slowdowns_page(request: Request, db: Session = Depends(get_db)):
         return result
     user = result
 
-    from clarinet.app_settings import get_setting
     from clarinet.analytics.mode import get_mode
 
     mode = get_mode(db)
@@ -97,7 +96,16 @@ def slowdowns_page(request: Request, db: Session = Depends(get_db)):
         baseline_ready = bool(is_baseline_ready(db))
     except Exception:
         baseline_ready = True
+    from clarinet.core_svc import device_speed
+    from clarinet.core_svc.permissions import visible_alerts
+    from clarinet.models import Alert
+    cards = [device_speed.summary(db, d) for d in device_speed.devices_for(db, user)]
+    recent = (visible_alerts(db, user).filter(Alert.type == "SLOWDOWN")
+              .order_by(Alert.raised_at.desc()).limit(15).all())
+
     return templates.TemplateResponse("slowdowns/index.html", {
+        "cards": cards,
+        "recent_slowdowns": recent,
         "request": request,
         "baseline_ready": baseline_ready,
         "user": user,

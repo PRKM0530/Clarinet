@@ -67,7 +67,7 @@ def setting(key):
 
 ADMIN_ONLY = ["/rules", "/vouchers", "/settings", "/status"]
 # Speed results and slowdown explanations are read-only for members (Clarinet_System_Documentation.pdf role matrix)
-MEMBER_AND_ADMIN = ["/dashboard", "/devices", "/usage", "/alerts", "/priority", "/speed", "/slowdowns", "/security"]
+MEMBER_AND_ADMIN = ["/dashboard", "/devices", "/usage", "/alerts", "/priority", "/speed", "/slowdowns"]
 PUBLIC = ["/login", "/guest", "/api/status/health", "/privacy"]
 
 
@@ -103,11 +103,13 @@ def test_admin_can_open_every_page(world, path):
 
 def test_the_sidebar_hides_admin_pages_from_members(world):
     page = member().get("/dashboard").text
-    for hidden in ("/rules", "/vouchers", "/settings", "/status"):
+    for hidden in ("/security", "/rules", "/vouchers", "/settings", "/status"):
         assert f'href="{hidden}"' not in page, f"member sidebar links to {hidden}"
-    assert 'href="/priority"' in page and 'href="/usage"' in page
-    assert 'href="/speed"' in page and 'href="/slowdowns"' in page and 'href="/account"' in page
-    assert 'href="/security"' in page and 'href="/security"' in admin().get("/dashboard").text   # same item, a member-sized page
+    for shown in ("/dashboard", "/devices", "/usage", "/speed", "/alerts", "/account"):
+        assert f'href="{shown}"' in page, shown
+    admin_page = admin().get("/dashboard").text
+    for shown in ("/security", "/settings"):
+        assert f'href="{shown}"' in admin_page, shown
 
 
 def test_a_guest_has_no_dashboard_access_after_redeeming(world):
@@ -208,7 +210,8 @@ def test_a_member_cannot_change_the_limit(world):
 
 
 def _use(db, device_id, nbytes):
-    db.add(UsageRecord(device_id=device_id, date=date.today().isoformat(), hour=1, bytes_in=nbytes, bytes_out=0))
+    stamp = datetime.now(timezone.utc)
+    db.add(UsageRecord(device_id=device_id, date=stamp.date().isoformat(), hour=stamp.hour, bytes_in=nbytes, bytes_out=0))
     db.commit()
 
 
@@ -230,12 +233,15 @@ def test_limit_warnings_follow_the_spec_at_70_90_and_100_percent(world, used_pct
         assert types == ([expected] if expected else [])
 
 
-def test_dashboard_shows_the_limit_to_the_admin_only(world):
+def test_dashboard_shows_the_limit_to_the_admin_only(world, monkeypatch):
+    from clarinet.core_svc import capabilities
+    monkeypatch.setattr(capabilities, "limited", lambda: {})          # this test is about who sees the limit, not the OS
+    monkeypatch.setattr(capabilities, "unavailable", lambda: {})
     with SessionLocal() as db:
         db.add(Settings(key="limit.bytes", value=str(100 * GB)))
         db.commit()
-    assert "Monthly data" in admin().get("/dashboard").text
-    assert "Monthly data" not in member().get("/dashboard").text
+    assert "of the monthly limit used" in admin().get("/dashboard").text
+    assert "of the monthly limit used" not in member().get("/dashboard").text
 
 
 def test_dashboard_has_no_limit_card_when_no_limit_is_set(world):
@@ -323,15 +329,6 @@ def test_codes_in_the_address_are_shown_as_plain_sentences(world, code, words):
     assert words in admin().get(f"/dashboard?error={code}").text
 
 
-def test_the_slowdown_banner_does_not_send_members_to_an_admin_page(world):
-    from clarinet.models import SlowdownEvent
-    with SessionLocal() as db:
-        db.add(SlowdownEvent(started_at=datetime.now(timezone.utc), causes_json='[{"cause": "NO_CLEAR_CAUSE"}]'))
-        db.commit()
-    assert 'href="/slowdowns"' not in member().get("/dashboard").text.split("slowdown-banner", 1)[-1][:900]
-    assert 'href="/slowdowns"' in admin().get("/dashboard").text
-
-
 # First-run wizard
 
 @pytest.fixture()
@@ -398,6 +395,8 @@ def test_privacy_page_follows_the_configured_retention(world):
     assert "30 days" in login().get("/privacy").text
 
 
-def test_the_login_page_and_sidebar_link_to_the_privacy_page(world):
+def test_the_login_page_and_account_page_link_to_the_privacy_page(world):
     assert 'href="/privacy"' in login().get("/login").text
-    assert 'href="/privacy"' in member().get("/dashboard").text
+    assert 'href="/privacy"' in member().get("/account").text
+
+

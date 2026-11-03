@@ -21,7 +21,15 @@ def account_page(request: Request, db: Session = Depends(get_db)):
     from clarinet.models.accounts import AdminRequest
     admin_request = db.get(AdminRequest, result.member_id)
     from clarinet.core_svc import recovery
+    from clarinet.models.reports import LoginAttempt
+    from clarinet.models.sessions import ActiveSession
+    sessions = db.query(ActiveSession).filter(ActiveSession.member_id == result.member_id).all()
+    sign_ins = (db.query(LoginAttempt).filter(LoginAttempt.member_id == result.member_id)
+                .order_by(LoginAttempt.attempted_at.desc()).limit(8).all())
     return templates.TemplateResponse("account/index.html", {
+        "sessions": sessions,
+        "sign_ins": sign_ins,
+        "failed_recently": sum(1 for s in sign_ins if not s.success),
         "has_recovery_code": recovery.has_code(db, result.member_id),
         "request": request,
         "user": result,
@@ -115,4 +123,4 @@ def sign_out_other_devices(request: Request, db: Session = Depends(get_db)):
         return result
     end_other_sessions(db, result.member_id, request.session.get("sid"))
     audit(db, result.member_id, "SIGN_OUT_OTHERS", "Member", result.member_id)
-    return RedirectResponse(url="/security?info=signed_out_others", status_code=302)
+    return RedirectResponse(url="/account?info=signed_out_others", status_code=302)

@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import statistics
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
 
 log = logging.getLogger("clarinet.analytics.early_warning")
 

@@ -33,44 +33,34 @@ def test_dashboard_shows_the_health_badge():
     assert "Healthy" in new_client(ADMIN).get("/dashboard").text
 
 
-@pytest.mark.parametrize("cause,badge", [("ONE_DEVICE_HEAVY", "Degraded"), ("INTERNET_OUTAGE", "Critical slowdown")])
-def test_health_badge_follows_the_active_slowdown(cause, badge):
-    import json
+def test_health_badge_and_banner_follow_the_persons_own_slow_devices():
     from clarinet.database import SessionLocal
-    from clarinet.models import SlowdownEvent
-    seed_world("FULL")
+    from clarinet.models.devspeed import DeviceSpeedResult
+    world = seed_world("FULL")
+    now = datetime.now(timezone.utc)
     with SessionLocal() as db:
-        db.add(SlowdownEvent(started_at=datetime.now(timezone.utc), causes_json=json.dumps([{"cause": cause}])))
+        for minutes, mbps in ((600, 100), (590, 100), (580, 100), (570, 100), (20, 30), (2, 30)):
+            db.add(DeviceSpeedResult(device_id=world["d_alice"], download_mbps=mbps, upload_mbps=5, latency_ms=20,
+                                     tested_at=now - timedelta(minutes=minutes)))
         db.commit()
-    for who in (ADMIN, ALICE):
-        assert badge in new_client(who).get("/dashboard").text
+    alice = new_client(ALICE).get("/dashboard").text
+    assert "Much slower" in alice and "slow device" in alice
+    assert "Healthy" in new_client(ADMIN).get("/dashboard").text      # alice's speed is not the admin's business
 
 
-def test_dashboard_has_the_three_target_latency_chart():
+def test_status_page_has_the_three_target_latency_chart():
     seed_world("FULL")
     ping_history()
-    page = new_client(ALICE).get("/dashboard").text
+    page = new_client(ADMIN).get("/status").text
     assert 'id="latency-chart"' in page and "Cloudflare" in page and "Google" in page
     assert '"router"' in page and '"cloudflare"' in page and '"google_dns"' in page
+    assert 'id="latency-chart"' not in new_client(ALICE).get("/dashboard").text      # the dashboard is about devices
 
 
-def test_dashboard_without_pings_explains_instead_of_an_empty_chart():
+def test_status_page_without_pings_explains_instead_of_an_empty_chart():
     seed_world("FULL")
-    page = new_client(ADMIN).get("/dashboard").text
-    assert "No latency measurements yet" in page and 'id="latency-chart"' not in page
-
-
-def test_admin_is_told_how_to_get_the_router_line():
-    seed_world("FULL")
-    ping_history(router=False)
-    assert "enter the router address" in new_client(ADMIN).get("/dashboard").text
-    assert "enter the router address" not in new_client(ALICE).get("/dashboard").text
-
-
-def test_dashboard_top_devices_have_usage_bars_scaled_to_the_busiest():
-    seed_world("FULL")
-    page = new_client(ADMIN).get("/dashboard").text
-    assert "width:100%" in page                                    # the busiest device fills its bar
+    page = new_client(ADMIN).get("/status").text
+    assert "No measurements yet" in page and 'id="latency-chart"' not in page
 
 
 def test_empty_usage_is_explained_on_a_monitor_only_install():
@@ -108,23 +98,6 @@ def test_leaving_and_rejoining_are_recorded_as_events():
     assert events == ["JOIN", "LEAVE", "JOIN"]
 
 
-def test_dashboard_activity_lists_joins_and_leaves_of_own_devices_only():
-    from clarinet.core_svc.presence import record_presence_changes
-    from clarinet.database import SessionLocal
-    seed_world("FULL")
-    with SessionLocal() as db:
-        record_presence_changes(db)
-    mine = new_client(ALICE).get("/dashboard").text
-    assert "alice-laptop" in mine and "bob-phone" not in mine
-    assert "bob-phone" in new_client(ADMIN).get("/dashboard").text
-
-
-def test_dashboard_page_hands_live_alerts_to_the_activity_list():
-    seed_world("FULL")
-    assert "clarinet:alert" in new_client(ALICE).get("/dashboard").text
-    assert "clarinet:alert" in open("clarinet/static/js/clarinet.js").read()
-
-
 # ---- device page
 def test_device_page_has_a_seven_day_usage_chart():
     world = seed_world("FULL")
@@ -156,30 +129,15 @@ def test_member_sees_the_time_rules_on_their_own_device_but_cannot_change_them()
 
 
 # ---- usage fairness
-def test_fairness_index_values():
-    from clarinet.analytics.fairness import fairness_words, jain_index
-    assert jain_index([5, 5, 5]) == pytest.approx(1.0)
-    assert jain_index([100, 1]) < 0.55
-    assert jain_index([10]) is None and jain_index([]) is None and jain_index([0, 0]) is None
-    assert "fairly" in fairness_words(1.0) and "most of the bandwidth" in fairness_words(0.5) and "Not enough" in fairness_words(None)
-
-
-def test_usage_page_shows_a_fairness_score_without_naming_devices():
-    seed_world("FULL")
-    for who in (ADMIN, ALICE):
-        page = new_client(who).get("/usage?period=today").text
-        assert "Fairness" in page
-    assert "bob-phone" not in new_client(ALICE).get("/usage?period=today").text
-
-
 # ---- alerts
 def test_alert_filters_by_type_level_and_status():
     seed_world("FULL")
     admin = new_client(ADMIN)
     page = admin.get("/alerts?status=ALL").text
-    assert "ARP_SPOOF" in page and "SLOWDOWN" in page
+    assert "ARP_SPOOF" in page
+    assert "SLOWDOWN" not in page                                   # members' slowdowns are theirs, not the admin's
     only = admin.get("/alerts?status=ALL&type=ARP_SPOOF").text
-    assert "SECRET-SECURITY-ALERT" in only and "ALICE-ALERT" not in only
+    assert "SECRET-SECURITY-ALERT" in only
     assert "SECRET-SECURITY-ALERT" not in admin.get("/alerts?status=ALL&level=WARNING").text
     assert 'name="type"' in page and "Arp Spoof" in page          # the type list is offered
 

@@ -2,7 +2,8 @@
 {% import "_messages.html" as msgs %}
 {% import "_ui.html" as ui %}
 {% macro nav_link(href, key, icon, label, linux=False) %}
-<a href="{{ href }}" class="sidebar-link {{ 'active' if page == key else '' }}"{% if page == key %} aria-current="page"{% endif %}>
+{% set here = page in key.split(',') %}
+<a href="{{ href }}" class="sidebar-link {{ 'active' if here else '' }}"{% if here %} aria-current="page"{% endif %}>
   <i class="bi {{ icon }}" aria-hidden="true"></i> <span>{{ label }}</span>
   {% if linux %}<span class="pill pill-warn pill-nav" title="This needs Linux. It does not work on this computer.">Linux required</span>{% endif %}
 </a>
@@ -15,40 +16,25 @@
   <a href="/dashboard" class="sidebar-brand">{{ ui.logo_mark() }}<span>Clarinet</span></a>
 
   <div class="sidebar-section">
-    <div class="sidebar-section-label">Overview</div>
     {{ nav_link('/dashboard', 'dashboard', 'bi-grid-1x2', 'Dashboard') }}
-    {{ nav_link('/usage', 'usage', 'bi-bar-chart-line', 'Usage') }}
-    {{ nav_link('/reports', 'reports', 'bi-file-earmark-text', 'Reports') }}
-    {{ nav_link('/alerts', 'alerts', 'bi-bell', 'Alerts') }}
-  </div>
-
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Devices</div>
     {{ nav_link('/devices', 'devices', 'bi-hdd-network', 'Devices') }}
-    {{ nav_link('/speed', 'speed', 'bi-speedometer2', 'Speed') }}
-    {{ nav_link('/slowdowns', 'slowdowns', 'bi-activity', 'Slowdowns') }}
-    {% if enforcing %}{{ nav_link('/priority', 'priority', 'bi-lightning-charge', 'Priority', not can_control) }}{% endif %}
-  </div>
-
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Protection</div>
-    {{ nav_link('/security', 'security', 'bi-shield', 'Security') }}
+    {{ nav_link('/usage', 'usage', 'bi-bar-chart-line', 'Usage') }}
+    {{ nav_link('/speed', 'speed,slowdowns', 'bi-speedometer2', 'Speed') }}
+    {{ nav_link('/alerts', 'alerts', 'bi-bell', 'Alerts') }}
+    {% if enforcing and not user.is_admin %}{{ nav_link('/priority', 'priority', 'bi-lightning-charge', 'Priority', not can_control) }}{% endif %}
   </div>
 
   {% if user.is_admin %}
   <div class="sidebar-section">
-    <div class="sidebar-section-label">Control</div>
-    {% if enforcing %}{{ nav_link('/rules', 'rules', 'bi-clock', 'Time rules', not can_control) }}{% endif %}
-    {% if quarantine %}{{ nav_link('/vouchers', 'guest', 'bi-ticket-perforated', 'Guest vouchers', not can_control) }}{% endif %}
-    {{ nav_link('/settings', 'settings', 'bi-sliders', 'Settings') }}
-    {{ nav_link('/status', 'status', 'bi-heart-pulse', 'System status') }}
+    <div class="sidebar-section-label">Manage</div>
+    {{ nav_link('/security', 'security', 'bi-shield', 'Security') }}
+    {% if enforcing %}{{ nav_link('/rules', 'rules,priority,guest', 'bi-sliders2', 'Access', not can_control) }}{% endif %}
+    {{ nav_link('/settings', 'settings,status', 'bi-sliders', 'Settings') }}
   </div>
   {% endif %}
 
   <div class="sidebar-section">
-    <div class="sidebar-section-label">Account</div>
     {{ nav_link('/account', 'account', 'bi-person-circle', 'My account') }}
-    {{ nav_link('/privacy', 'privacy', 'bi-shield-lock', 'Privacy') }}
   </div>
 
   <div class="sidebar-footer">
@@ -75,7 +61,6 @@
     <h1 class="topbar-title">{% block page_title %}{% endblock %}</h1>
     <div class="topbar-right">
       {% if user.is_admin %}
-      <span class="topbar-meta" title="All times on these pages are shown in this time zone">{{ local_zone() }}</span>
       <span id="mode-label" class="topbar-meta" title="What Clarinet is allowed to do on this network"></span>
       {% endif %}
       <div class="ws-pill" id="ws-pill" role="status">
@@ -98,11 +83,6 @@
   </div>
   {% endif %}
 
-  {% if enforce_problem and user.is_admin %}
-  <div class="flash-bar error" role="alert" id="enforce-problem">
-    <span><strong>Full Control cannot change the network right now.</strong> {{ enforce_problem|capitalize }}. Blocks, time rules, speed limits and vouchers are saved but have no effect until this is fixed. Start Clarinet as root on the router, or switch to Monitor only in Settings.</span>
-  </div>
-  {% endif %}
 
   <div id="toast-container" aria-live="polite"></div>
 
@@ -111,4 +91,5 @@
   </div>
 </div>
 </div>
+<script src="/static/js/device_speed.js"></script>
 {% endblock %}

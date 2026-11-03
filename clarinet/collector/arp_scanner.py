@@ -16,8 +16,14 @@ AT-03.4: IP change keeps the same device identity (keyed on MAC).
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import platform
+import re
 import socket
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -87,6 +93,8 @@ class NeighbourTableSource(ArpSource):
     def scan(self, interface: str, subnet: str | None = None) -> list[dict]:
         from clarinet.core_svc.runner import get_runner
         runner = self._runner or get_runner()
+        if platform.system() == "Windows":
+            return _windows_neighbours(runner)
         try:
             result = runner.run(["ip", "neigh", "show"])
             lines = (result.stdout or "").splitlines()
@@ -97,13 +105,123 @@ class NeighbourTableSource(ArpSource):
                 if len(parts) >= 5 and "lladdr" in parts:
                     ip = parts[0]
                     lladdr_idx = parts.index("lladdr")
-                    mac = parts[lladdr_idx + 1].upper()
-                    hostname = _resolve_hostname(ip)
-                    entries.append({"ip": ip, "mac": mac, "hostname": hostname})
+                    entries.append({"ip": ip, "mac": parts[lladdr_idx + 1].upper(), "hostname": None})
+            names = _resolve_many([e["ip"] for e in entries])
+            for e in entries:
+                e["hostname"] = names.get(e["ip"])
             return entries
         except Exception as exc:
             log.debug("NeighbourTableSource failed: %s", exc)
             return []
+
+
+# ─── Windows: the ARP cache is read with `arp -a` ─────────────────────────────
+
+_ARP_ROW = re.compile(r"^\s*(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F]{2}(?:-[0-9a-fA-F]{2}){5})\s+(\w+)")
+_last_sweep = 0.0
+SWEEP_EVERY_SECONDS = 120
+
+
+def parse_windows_arp(text: str) -> list[dict]:
+    """Devices from `arp -a`: private unicast addresses only (no multicast, broadcast or router-less entries)."""
+    found, seen = [], set()
+    for line in text.splitlines():
+        m = _ARP_ROW.match(line)
+        if not m:
+            continue
+        ip, mac, kind = m.group(1), m.group(2).replace("-", ":").upper(), m.group(3).lower()
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if kind != "dynamic" or not addr.is_private or addr.is_multicast or addr.is_loopback or mac.startswith("FF:FF") or mac in seen:
+            continue
+        seen.add(mac)
+        found.append({"ip": ip, "mac": mac, "hostname": None})
+    return found
+
+
+def _local_ip() -> str | None:
+    """The address this computer uses on the local network (nothing is sent)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("192.0.2.1", 9))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
+
+
+def _poke(ip: str) -> None:
+    """One quick ping, so the device appears in the ARP cache."""
+    try:
+        subprocess.run(["ping", "-n", "1", "-w", "300", ip], capture_output=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def _sweep_local_network() -> None:
+    """Ping the computer's own /24 now and then, so devices that have been quiet still show in `arp -a`."""
+    global _last_sweep
+    if time.monotonic() - _last_sweep < SWEEP_EVERY_SECONDS:
+        return
+    _last_sweep = time.monotonic()
+    me = _local_ip()
+    if not me:
+        return
+    net = ipaddress.ip_network(f"{me}/24", strict=False)
+    with ThreadPoolExecutor(max_workers=64) as pool:
+        list(pool.map(_poke, [str(h) for h in net.hosts() if str(h) != me]))
+
+
+def parse_adapter_mac(ipconfig_all: str, ip: str) -> str | None:
+    """The physical address of the adapter that has `ip`, from `ipconfig /all`."""
+    block_mac = None
+    for line in ipconfig_all.splitlines():
+        if line and not line[0].isspace():
+            block_mac = None                       # a new adapter starts
+        m = re.search(r"Physical Address[ .]*:\s*([0-9A-Fa-f]{2}(?:-[0-9A-Fa-f]{2}){5})", line)
+        if m:
+            block_mac = m.group(1).replace("-", ":").upper()
+        elif ip in line and "IPv4" in line and block_mac:
+            return block_mac
+    return None
+
+
+_host_cache: dict = {}
+
+
+def host_identity() -> dict | None:
+    """This computer as a device: {"ip", "mac", "hostname"}. Windows only; Linux sees itself in the neighbour table."""
+    if platform.system() != "Windows":
+        return None
+    if "me" in _host_cache:
+        return _host_cache["me"]
+    me = _local_ip()
+    identity = None
+    if me:
+        try:
+            out = subprocess.run(["ipconfig", "/all"], capture_output=True, text=True, timeout=10, errors="replace").stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        mac = parse_adapter_mac(out, me)
+        if mac:
+            identity = {"ip": me, "mac": mac, "hostname": socket.gethostname()}
+    _host_cache["me"] = identity
+    return identity
+
+
+def _windows_neighbours(runner) -> list[dict]:
+    try:
+        _sweep_local_network()
+        out = runner.run(["arp", "-a"], timeout=10).stdout or ""
+    except Exception as exc:
+        log.debug("arp -a failed: %s", exc)
+        return []
+    found = parse_windows_arp(out)
+    me = host_identity()
+    if me and all(f["mac"] != me["mac"] for f in found):
+        found.append(dict(me))
+    return found
 
 
 class FakeSource(ArpSource):
@@ -169,12 +287,27 @@ def set_source(source: ArpSource) -> None:
 
 # ─── Core scan logic ──────────────────────────────────────────────────────────
 
+_name_cache: dict[str, tuple[float, str | None]] = {}
+NAME_CACHE_SECONDS = 1800
+
+
 def _resolve_hostname(ip: str) -> str | None:
-    """Reverse DNS lookup — best-effort, 0.5 s timeout."""
+    """Reverse DNS lookup, best effort. Remembered for a while, so every scan does not ask again."""
+    hit = _name_cache.get(ip)
+    if hit and time.monotonic() - hit[0] < NAME_CACHE_SECONDS:
+        return hit[1]
     try:
-        return socket.gethostbyaddr(ip)[0]
+        name = socket.gethostbyaddr(ip)[0]
     except Exception:
-        return None
+        name = None
+    _name_cache[ip] = (time.monotonic(), name)
+    return name
+
+
+def _resolve_many(ips: list[str]) -> dict[str, str | None]:
+    """Look up many names at once: one slow answer must not hold up the others."""
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        return dict(zip(ips, pool.map(_resolve_hostname, ips)))
 
 
 def _get_guest_subnet(db) -> str | None:
@@ -218,6 +351,7 @@ def scan_once(db, interface: str, subnet: str | None = None) -> list[dict]:
 
     now = datetime.now(timezone.utc)
     new_devices: list[dict] = []
+    first_scan = db.query(Device.device_id).first() is None        # nothing known yet: everything is "new"
 
     for entry in results:
         ip = entry.get("ip")
@@ -275,16 +409,17 @@ def scan_once(db, interface: str, subnet: str | None = None) -> list[dict]:
                 new_value=ip,
             ))
 
-            # Alert — but NOT for GUEST devices (C-05)
-            raise_alert(
-                db,
-                level="WARNING",
-                type="NEW_DEVICE",
-                title="New device detected",
-                message=f"Unknown device {mac} ({vendor or 'unknown vendor'}) joined from {ip}.",
-                device_id=device.device_id,
-                cooldown_s=3600,
-            )
+            # Alert, except for the very first scan, which gets one summary below (C-05: never for guests)
+            if not first_scan:
+                raise_alert(
+                    db,
+                    level="WARNING",
+                    type="NEW_DEVICE",
+                    title="New device detected",
+                    message=f"Unknown device {mac} ({vendor or 'unknown vendor'}) joined from {ip}.",
+                    device_id=device.device_id,
+                    cooldown_s=3600,
+                )
 
             new_devices.append({"mac": mac, "ip": ip, "device_id": device.device_id})
             log.info("New device: %s (%s)", mac, ip)
@@ -312,6 +447,17 @@ def scan_once(db, interface: str, subnet: str | None = None) -> list[dict]:
                 existing.vendor = vendor
 
             existing.last_seen = now
+
+    if first_scan and new_devices:
+        raise_alert(
+            db,
+            level="INFO",
+            type="NEW_DEVICE",
+            title=f"{len(new_devices)} device{'s' if len(new_devices) != 1 else ''} found on your network",
+            message="These are the devices Clarinet found on its first scan. Open Devices to approve the ones you know. "
+                    "From now on you are alerted whenever a new one joins.",
+            cooldown_s=3600,
+        )
 
     db.commit()
     return new_devices

@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 
 from clarinet.auth import client_ip, get_session_user
 from clarinet.core_svc import device_speed
-from clarinet.core_svc.accounts import detect_device
+from clarinet.core_svc.accounts import detect_device, is_clarinet_host
 from clarinet.database import get_db
+from clarinet.models.devspeed import DeviceSpeedResult
 
 router = APIRouter(prefix="/speed/device", tags=["device-speed"])
 
@@ -29,6 +30,26 @@ NO_STORE = {"Cache-Control": "no-store, no-transform", "Content-Encoding": "iden
 
 def _unauthorised():
     return JSONResponse({"error": "Sign in first."}, status_code=401)
+
+
+@router.get("/due")
+def test_due(request: Request, db: Session = Depends(get_db)):
+    """Should the page quietly test the device it is open on? Only the owner's device, and only when its
+    last test is older than the interval. The page asks; the server decides, so every tab agrees."""
+    user = get_session_user(request, db)
+    if user is None:
+        return _unauthorised()
+    device = detect_device(db, client_ip(request))
+    interval = device_speed.test_interval_minutes(db)
+    if is_clarinet_host(client_ip(request)) or device is None or not device_speed.may_measure(user, device):
+        return {"due": False, "interval_minutes": interval}
+    from datetime import datetime, timedelta, timezone
+    last = (db.query(DeviceSpeedResult).filter(DeviceSpeedResult.device_id == device.device_id)
+            .order_by(DeviceSpeedResult.tested_at.desc()).first())
+    if last is None:
+        return {"due": True, "interval_minutes": interval}
+    stamp = last.tested_at if last.tested_at.tzinfo else last.tested_at.replace(tzinfo=timezone.utc)
+    return {"due": datetime.now(timezone.utc) - stamp >= timedelta(minutes=interval), "interval_minutes": interval}
 
 
 @router.get("/probe/ping")
@@ -79,11 +100,14 @@ async def store_result(request: Request, db: Session = Depends(get_db)):
     except ValueError:
         return JSONResponse({"error": "The measurement was not valid."}, status_code=400)
 
+    if is_clarinet_host(client_ip(request)):
+        return JSONResponse({"error": "Clarinet runs on this computer, so a test here would only measure the computer "
+                                      "itself, not your network. Open Clarinet from another device on the network."}, status_code=422)
     device = detect_device(db, client_ip(request))
     if device is None:
         return JSONResponse({"error": "Clarinet does not recognise the device you are using yet. "
                                        "Wait a minute for it to be found, then try again."}, status_code=409)
-    if not user.is_admin and device.owner_member_id != user.member_id:
+    if not device_speed.may_measure(user, device):
         return JSONResponse({"error": "This device is not yours. Claim it on the Devices page first."}, status_code=403)
     try:
         row = device_speed.record(db, device, user.member_id, body.get("download_mbps"), body.get("upload_mbps"),
@@ -92,5 +116,20 @@ async def store_result(request: Request, db: Session = Depends(get_db)):
         return JSONResponse({"error": str(refused)}, status_code=422)
 
     summary = device_speed.summary(db, device)
+    from clarinet.core_svc.alerts import raise_alert
+    from clarinet.core_svc.device_names import device_name
+    from clarinet.models import Alert
+    if summary.status in ("slower", "much_slower"):
+        why = (f"Its speed was {row.download_mbps:.1f} Mbps; it usually gets about {summary.baseline_mbps:.1f} Mbps."
+               if summary.reason == "speed" else
+               f"Its delay was {row.latency_ms:.0f} ms; it is usually about {summary.baseline_latency_ms:.0f} ms.")
+        raise_alert(db, level="CRITICAL" if summary.status == "much_slower" else "WARNING", type="SLOWDOWN",
+                    title=(f"{device_name(device)} is {summary.slowdown_pct}% slower than usual" if summary.reason == "speed"
+                           else f"{device_name(device)} has a long delay"),
+                    message=why, device_id=device.device_id, cooldown_s=3600)
+    elif summary.status == "ok":                       # back to normal: the old alert is no longer true
+        db.query(Alert).filter(Alert.type == "SLOWDOWN", Alert.device_id == device.device_id,
+                               Alert.status == "OPEN").update({"status": "RESOLVED"})
+        db.commit()
     return {"ok": True, "device_id": device.device_id, "result_id": row.result_id,
             "status": summary.status, "slowdown_pct": summary.slowdown_pct}

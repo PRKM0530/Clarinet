@@ -201,7 +201,7 @@ def test_adm08_pages_still_work_after_a_purge():
     seed_world()
     admin = new_client(ADMIN)
     admin.post("/settings/purge", data={"confirm": "DELETE"})
-    for page in ("/dashboard", "/devices", "/alerts", "/usage", "/reports", "/speed", "/slowdowns", "/security", "/vouchers"):
+    for page in ("/dashboard", "/devices", "/alerts", "/usage", "/status", "/speed", "/slowdowns", "/security", "/vouchers"):
         assert admin.get(page).status_code == 200, page
 
 

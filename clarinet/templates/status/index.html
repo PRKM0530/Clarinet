@@ -1,24 +1,49 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% from "_ui.html" import pill, linux_pill, metric %}
 {% block title %}System status{% endblock %}
 {% block page_title %}System status{% endblock %}
 {% block content %}
+{% if user.is_admin %}{{ ui.settings_tabs('status') }}{% endif %}
 <div class="page-header">
   <h2>System status</h2>
-  <p>How Clarinet and the computer it runs on are doing. Speed and slowdowns of individual devices are on the Speed and Slowdowns pages.</p>
+  <p>How Clarinet and the computer it runs on are doing.</p>
 </div>
 
 {% if system.problem and mode == 'FULL' %}
 <div class="caution" role="note"><span class="pill pill-warn">Needs attention</span><span>Full Control cannot change the network: {{ system.problem }}.</span></div>
 {% endif %}
 
-<div class="metric-row section">
-  {{ metric('Running for', human_duration(system.uptime_seconds)) }}
-  {{ metric('Mode', mode_word) }}
-  {{ metric('Devices online', online_devices ~ ' of ' ~ total_devices) }}
-  {{ metric('Open alerts', open_alerts) }}
-  {{ metric('Awaiting approval', new_devices) }}
-</div>
+<section class="section">
+  <div class="micro section-label">What works on this computer</div>
+  <div class="card">
+    <table class="cl-table"><tbody>
+      {% for f in features.values() %}
+      <tr><td>{{ f.name }}</td><td class="muted">{{ f.what[0]|upper }}{{ f.what[1:] }}</td>
+        <td class="num">{% if f.works and f.partial %}{{ pill('Partly', 'warn', f.partial) }}<div class="muted" style="font-size:12px">{{ f.partial }}</div>{% elif f.works %}{{ pill('Working', 'ok') }}{% else %}{{ pill('Not available', 'warn', f.reason) }}<div class="muted" style="font-size:12px">{{ f.reason }}</div>{% endif %}</td></tr>
+      {% endfor %}
+      <tr><td>Router and internet checks</td><td class="muted">Delay and reachability</td><td class="num">{{ pill('Working', 'ok') }}</td></tr>
+      <tr><td>Speed tests</td><td class="muted">Internet and per-device speed</td><td class="num">{{ pill('Working', 'ok') }}</td></tr>
+    </tbody></table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="micro section-label">Router and internet</div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-header-title">Delay, last 3 hours</span>
+      <a href="/speed?view=internet" class="card-header-sub">Internet speed test and provider report &rarr;</a>
+    </div>
+    <div class="card-body">
+      {% if latency %}
+      <div style="height:200px"><canvas id="latency-chart" aria-label="Delay to the router and the public servers over the last three hours"></canvas></div>
+      {% else %}
+      <div class="empty-state"><h4>No measurements yet</h4><p>Clarinet checks every minute. The chart fills in after a few minutes.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</section>
 
 <div class="two-col section">
   <section>
@@ -40,10 +65,11 @@
     <div class="micro section-label">This computer</div>
     <div class="card">
       <table class="cl-table"><tbody>
+        <tr><td>Running for</td><td class="num mono">{{ human_duration(system.uptime_seconds) }}</td></tr>
         <tr><td>System</td><td class="num mono">{{ system.system }}</td></tr>
         <tr><td>Python</td><td class="num mono">{{ system.python }}</td></tr>
-        <tr><td>Load (1, 5, 15 min)</td><td class="num mono">{% if system.load %}{{ system.load|join(' · ') }}{% else %}<span class="muted">not available on this system</span>{% endif %}</td></tr>
-        <tr><td>Memory in use</td><td class="num mono">{% if system.memory_used_pct is not none %}{{ system.memory_used_pct }}% of {{ system.memory_total_bytes|size }}{% else %}<span class="muted">not available on this system</span>{% endif %}</td></tr>
+        <tr><td>Load (1, 5, 15 min)</td><td class="num mono">{% if system.load %}{{ system.load|join(' · ') }}{% else %}{{ linux_pill() }}{% endif %}</td></tr>
+        <tr><td>Memory in use</td><td class="num mono">{% if system.memory_used_pct is not none %}{{ system.memory_used_pct }}% of {{ system.memory_total_bytes|size }}{% else %}{{ linux_pill() }}{% endif %}</td></tr>
         <tr><td>Disk free</td><td class="num mono">{% if system.disk_free_bytes is not none %}{{ system.disk_free_bytes|size }} of {{ system.disk_total_bytes|size }}{% else %}-{% endif %}</td></tr>
         <tr><td>Database</td><td class="num mono">{{ system.database_bytes|size if system.database_bytes is not none else '-' }}</td></tr>
       </tbody></table>
@@ -68,13 +94,23 @@
   </div>
 </section>
 
-{% if limit %}
-<section class="section">
-  <div class="micro section-label">Monthly data</div>
-  <div class="card card-body">
-    <p class="mono">{{ limit.period_start }} to {{ limit.period_end }} &middot; {{ limit.days_remaining }} day(s) left</p>
-    <p>Used <strong class="mono">{{ limit.bytes_used|size }}</strong>{% if limit.bytes_limit %} of <span class="mono">{{ limit.bytes_limit|size }}</span> ({{ "%.0f"|format((limit.pct_used or 0)*100) }}%){% endif %}</p>
-  </div>
-</section>
-{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const series = {{ latency|tojson }};
+  const el = document.getElementById('latency-chart');
+  if (!el || !window.Chart) return;
+  const names = { router: 'Router', cloudflare: 'Cloudflare 1.1.1.1', google_dns: 'Google 8.8.8.8' };
+  const colours = { router: '#2563eb', cloudflare: '#0d9488', google_dns: '#d97706' };
+  new Chart(el, {
+    type: 'scatter',
+    data: { datasets: Object.keys(series).map(k => ({ label: names[k] || k, data: series[k], showLine: true, pointRadius: 0, borderWidth: 2, tension: 0.25, borderColor: colours[k] || '#64748b' })) },
+    options: { responsive: true, maintainAspectRatio: false, animation: false,
+      scales: { x: { type: 'linear', title: { display: true, text: 'minutes ago' }, ticks: { callback: v => v === 0 ? 'now' : v } }, y: { beginAtZero: true, title: { display: true, text: 'ms' } } },
+      plugins: { legend: { position: 'bottom' } } }
+  });
+})();
+</script>
 {% endblock %}

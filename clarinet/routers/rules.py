@@ -277,7 +277,7 @@ def rules_for_device(device_id: int, request: Request, db: Session = Depends(get
         .filter(TimeRule.device_id == device_id)
         .all()
     )
-    now = datetime.now(timezone.utc)
+    datetime.now(timezone.utc)
     return JSONResponse({
         "device_id": device_id,
         "rules": [

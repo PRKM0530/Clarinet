@@ -1,8 +1,10 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% from "_mode_picker.html" import mode_picker %}
 {% block title %}Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
 {% block content %}
+{% if user.is_admin %}{{ ui.settings_tabs('settings') }}{% endif %}
 <div class="page-header">
   <h2>Settings</h2>
   <p>How Clarinet works, your internet plan, and who can use it.</p>
@@ -78,9 +80,15 @@
             </div>
             <div class="form-row">
               <div>
-                <label class="form-label" for="f-speed_test_interval_hours-1">Test the speed every (hours)</label>
+                <label class="form-label" for="f-speed_test_interval_hours-1">Test the internet speed every (hours)</label>
                 <input id="f-speed_test_interval_hours-1" type="number" name="speed_test_interval_hours" class="form-input"
                        value="{{ cfg.get('speed_test_interval_hours', '6') }}" min="1" max="168" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="f-device_test_interval_minutes-1">Test each device every (minutes)</label>
+                <input id="f-device_test_interval_minutes-1" type="number" name="device_test_interval_minutes" class="form-input"
+                       value="{{ cfg.get('device_test_interval_minutes', '60') }}" min="15" max="1440" />
+                <div class="form-hint">Each device tests its own connection to Clarinet this often, quietly, while Clarinet is open on it. A test takes about 10 seconds. A slowdown needs two low tests in a row, so with 60 it shows within one to two hours.</div>
               </div>
               <div>
                 <label class="form-label" for="f-speed_threshold_pct-1">Too slow when under (% of plan)</label>
@@ -173,33 +181,6 @@
             {% endfor %}
           </tbody>
         </table>
-      </div>
-    </div>
-
-    <!-- Change own password -->
-    <div class="card">
-      <div class="card-header">
-        
-        <span class="card-header-title">Change Password</span>
-      </div>
-      <div class="card-body">
-        <form method="post" action="/account/password">
-          <div class="form-group">
-            <label class="form-label" for="f-current_password-1">Current password</label>
-            <input id="f-current_password-1" type="password" name="current_password" class="form-input" placeholder="••••••••" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="f-new_password-1">New password</label>
-            <input id="f-new_password-1" type="password" name="new_password" class="form-input" placeholder="Min. 8 characters" required minlength="8" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="f-confirm_password-1">Confirm new password</label>
-            <input id="f-confirm_password-1" type="password" name="confirm_password" class="form-input" placeholder="Repeat" required />
-          </div>
-          <button type="submit" class="btn btn-primary" style="width:100%">
-            Change Password
-          </button>
-        </form>
       </div>
     </div>
   </div>

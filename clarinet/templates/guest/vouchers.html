@@ -1,10 +1,11 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% import "_modes.html" as modes %}
 {% block title %}Guest Vouchers{% endblock %}
 {% block page_title %}Guest Vouchers{% endblock %}
 {% from "_ui.html" import os_banner %}
 {% block content %}
-{% if enforcing and not can_control %}{{ os_banner("Guest vouchers") }}{% endif %}
+{% if user.is_admin %}{{ ui.access_tabs('guest') }}{% endif %}
 {% if not quarantine %}
 {{ modes.needs_full('Guest vouchers', user, net_mode) }}
 {% else %}
@@ -14,9 +15,10 @@
       <h2>Guest Vouchers</h2>
       <p>One-time access codes for guests. Share a code — it grants timed internet access.</p>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">{{ ui.control_pill(enforcing, can_control) }}
     <button class="btn btn-primary" onclick="openModal('create-voucher-modal')">
       Create Voucher
-    </button>
+    </button></div>
   </div>
 </div>
 

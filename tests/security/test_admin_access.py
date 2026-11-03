@@ -163,8 +163,9 @@ def test_member_cannot_read_security_alerts_on_the_alerts_page(accounts, db):
 def test_admin_still_sees_every_alert(accounts, db):
     _seed_alerts(db)
     body = client_for("boss", "pw-admin-1").get("/alerts").text
-    for shown in ("SECRET-ARP-ALERT", "SECRET-ROUTER-AUDIT", "SECRET-FAKE-AP", "MINE-ALERT", "OTHERS-ALERT"):
+    for shown in ("SECRET-ARP-ALERT", "SECRET-ROUTER-AUDIT", "SECRET-FAKE-AP", "OTHERS-ALERT"):
         assert shown in body
+    assert "MINE-ALERT" not in body            # a member's slowdown alert is the member's own
 
 
 def test_member_cannot_acknowledge_someone_elses_or_security_alerts(accounts, db):

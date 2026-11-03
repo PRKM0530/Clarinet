@@ -66,5 +66,7 @@ def visible_alerts(db: Session, member: Member):
     """
     query = db.query(Alert)
     if member.is_admin:
-        return query
+        # A slowdown of someone else's device is theirs to see: the administrator cannot act on it
+        others = db.query(Device.device_id).filter(Device.owner_member_id.isnot(None), Device.owner_member_id != member.member_id)
+        return query.filter(~((Alert.type == "SLOWDOWN") & Alert.device_id.in_(others)))
     return query.filter(Alert.device_id.in_(member_device_ids(db, member)))

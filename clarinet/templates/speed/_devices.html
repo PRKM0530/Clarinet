@@ -1,12 +1,38 @@
 <div class="note">
   <strong>Device speed</strong> is measured from each device itself to Clarinet, so it shows how that device's own Wi-Fi or cable link is doing.
-  {% if user.is_admin %}It is separate from the internet speed measured at the gateway, on the Internet connection tab.{% else %}Each device is compared only with its own earlier tests.{% endif %}
+  Each device is compared only with its own earlier tests, never with other devices.
+  It tests itself about every {{ test_interval }} minutes while Clarinet is open on it, and you can test it any time. A slowdown is flagged when two tests in a row are at least 25% below its usual speed, which with this schedule takes about an hour or two.
+  Everyone tests and sees only their own devices, because each person's Wi-Fi and distance to the router are different.
 </div>
+
+{% if claim.state != 'mine' %}
+<div class="card section" style="margin-bottom:16px">
+  <div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px">
+      <div style="font-weight:600">Test the device you are using</div>
+      {% if claim.state == 'host' %}
+      <div class="muted">Clarinet runs on this computer, so a test here would only measure the computer talking to itself, not your network. Open Clarinet from your phone or another computer on the network and test from there.</div>
+      {% elif claim.state == 'claimable' %}
+      <div class="muted">You are using <strong>{{ claim.device|device_name }}</strong>. Add it to your devices first, then you can test it.</div>
+      {% elif claim.state == 'pending' %}
+      <div class="muted">Your request for <strong>{{ claim.device|device_name }}</strong> is waiting for an administrator. You can test it once it is confirmed.</div>
+      {% elif claim.state == 'taken' %}
+      <div class="muted"><strong>{{ claim.device|device_name }}</strong> belongs to someone else, so only its owner can test it.</div>
+      {% else %}
+      <div class="muted">Clarinet does not recognise this device yet. Open Clarinet on the phone or computer you want to test, while it is connected to this network, and wait a minute for it to be found.</div>
+      {% endif %}
+    </div>
+    {% if claim.state == 'claimable' %}
+    <form method="post" action="/devices/claim"><button class="btn btn-primary" type="submit">This is my device</button></form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 
 {% if not cards %}
 <div class="empty-state">
   <h4>No devices to show</h4>
-  <p>{% if user.is_admin %}Devices appear here once Clarinet has found them on the network.{% else %}You have no devices yet. Open <a href="/devices">Devices</a> while you are connected and choose "This is my device".{% endif %}</p>
+  <p>{% if user.is_admin %}You have no devices assigned to you yet. Open <a href="/devices">Devices</a> while you are connected and choose "This is my device".{% else %}You have no devices yet. Open <a href="/devices">Devices</a> while you are connected and choose "This is my device".{% endif %}</p>
 </div>
 {% endif %}
 
@@ -20,6 +46,7 @@
       <span class="device-card-tags">
         {% if here %}{{ pill('This device') }}{% endif %}
         {% if c.status == 'ok' %}{{ pill('Normal', 'ok') }}
+        {% elif c.status == 'possible' %}{{ pill('Test again to confirm', 'warn', 'The last result was low. One reading is not enough: test again to see whether it is a real slowdown.') }}
         {% elif c.status == 'slower' %}{{ pill('Slower than usual', 'warn') }}
         {% elif c.status == 'much_slower' %}{{ pill('Much slower', 'bad') }}
         {% elif c.status == 'learning' %}{{ pill('Learning', 'neutral', 'A few more tests are needed before a slowdown can be judged.') }}
@@ -36,7 +63,7 @@
       {{ metric('Slowdown', (c.slowdown_pct ~ '%') if c.slowdown_pct is not none else 'n/a', '', tone) }}
     </div>
     <p class="micro-note">
-      {% if c.baseline_mbps is not none %}This device usually gets about <span class="mono">{{ '%.1f'|format(c.baseline_mbps) }} Mbps</span>. Slowdown is how far below that this test was.{% else %}Slowdown appears after a few more tests, once Clarinet knows what is normal for this device.{% endif %}
+      {% if c.baseline_mbps is not none %}This device usually gets about <span class="mono">{{ '%.1f'|format(c.baseline_mbps) }} Mbps</span>. A slowdown is confirmed when two tests in a row, within a few hours, are well below that, so one unlucky reading does not count.{% else %}Slowdown appears after a few more tests, once Clarinet knows what is normal for this device.{% endif %}
       Last tested {{ c.latest.tested_at|local('%d %b %H:%M') }}.
     </p>
     {% else %}

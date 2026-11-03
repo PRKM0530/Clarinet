@@ -1,12 +1,56 @@
 {% extends "base_app.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Slowdowns{% endblock %}
-{% block page_title %}Slowdown Events{% endblock %}
+{% block page_title %}Slowdowns{% endblock %}
 {% block content %}
+{{ ui.speed_tabs('slowdowns', user.is_admin) }}
 <div class="page-header">
-  <h2>Slowdown Events</h2>
-  <p>Times the network was slower than usual, with the most likely cause for each.</p>
+  <h2>Slowdowns</h2>
+  <p>A device is slow when its latest speed test is well below what that same device usually gets. Every device is judged against itself.{% if user.is_admin %}{% endif %}</p>
 </div>
 
+<section class="section">
+  <div class="micro section-label">Your devices</div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="cl-table">
+        <thead><tr><th>Device</th><th>Status</th><th class="num">Latest</th><th class="num">Usually</th><th class="num">Slowdown</th><th class="num">Tested</th></tr></thead>
+        <tbody>
+          {% for c in cards %}
+          <tr>
+            <td>{{ ui.device_ref(c.device) }}</td>
+            <td>{% if c.status == 'ok' %}{{ ui.pill('Normal', 'ok') }}{% elif c.status == 'possible' %}{{ ui.pill('Test again to confirm', 'warn', 'The last result was low. One reading is not enough: test again to see whether it is a real slowdown.') }}{% elif c.status == 'slower' %}{{ ui.pill('Slower than usual', 'warn') }}{% elif c.status == 'much_slower' %}{{ ui.pill('Much slower', 'bad') }}{% elif c.status == 'learning' %}{{ ui.pill('Learning', 'neutral', 'A few more tests are needed before a slowdown can be judged.') }}{% else %}{{ ui.pill('Not tested') }}{% endif %}</td>
+            <td class="num mono">{% if c.latest %}{{ '%.1f'|format(c.latest.download_mbps) }} Mbps{% else %}-{% endif %}</td>
+            <td class="num mono">{% if c.baseline_mbps is not none %}{{ '%.1f'|format(c.baseline_mbps) }} Mbps{% else %}-{% endif %}</td>
+            <td class="num mono">{% if c.slowdown_pct is not none %}{{ c.slowdown_pct }}%{% else %}-{% endif %}</td>
+            <td class="num muted">{% if c.latest %}{{ c.latest.tested_at|local('%d %b %H:%M') }}{% else %}-{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted">No devices yet. {% if not user.is_admin %}Open <a href="/devices">Devices</a> and choose "This is my device".{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="card-note">To check a device, open <a href="/speed">Speed</a> on it and press "Test this device". Test now and then so Clarinet learns what is normal for it.</p>
+  </div>
+</section>
+
+{% if recent_slowdowns %}
+<section class="section">
+  <div class="micro section-label">Recent slowdowns</div>
+  <div class="card">
+    <table class="cl-table"><tbody>
+      {% for a in recent_slowdowns %}
+      <tr><td>{{ ui.pill(a.level.title(), 'bad' if a.level == 'CRITICAL' else 'warn') }}</td><td>{{ a.title }}</td><td class="muted">{{ a.message }}</td><td class="num muted">{{ a.raised_at|local('%d %b %H:%M') }}</td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+<div class="micro section-label">The internet connection and router</div>
+<p class="muted" style="margin:0 0 12px">These events are about the connection as a whole, not one device. They help tell a problem with the internet from a problem with your device.</p>
 {% if not baseline_ready %}
 <div class="flash-bar success" style="margin-bottom:16px">Clarinet is still learning what is normal for your network (it needs about a day of data). Until then it may stay quiet even when things feel slow.</div>
 {% endif %}
@@ -71,7 +115,7 @@
     </div>
     {% endfor %}
   </div>
-  {% if raw %}
+  {% if raw and user.is_admin %}
   <div style="background:var(--surface-2);padding:12px 18px;border-top:1px solid var(--border)">
     <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:8px">Raw Metrics at Detection</div>
     <div style="display:flex;gap:24px;flex-wrap:wrap">
@@ -99,7 +143,6 @@
   <p>Clarinet monitors your latency and speed 24/7. Events appear here automatically.</p>
 </div>
 {% endif %}
-{% if user.is_admin %}
-<p class="muted" style="margin-top:24px">To make detection more or less sensitive, see Settings, then Advanced.</p>
-{% endif %}
+{% if user.is_admin %}<p class="muted" style="margin-top:24px">To make detection more or less sensitive, see Settings, then Advanced.</p>{% endif %}
+</section>
 {% endblock %}

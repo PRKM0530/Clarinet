@@ -19,11 +19,11 @@ from __future__ import annotations
 import logging
 import threading
 from abc import ABC, abstractmethod
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from clarinet.core_svc.runner import Runner
+    pass
 
 log = logging.getLogger("clarinet.collector.traffic")
 
@@ -86,6 +86,27 @@ class PacketSniffSource(TrafficSource):
         return {}
 
 
+class HostTrafficSource(TrafficSource):
+    """
+    Windows: the bytes this computer itself has received and sent, from `netstat -e`.
+    A laptop cannot see other devices' traffic, so only this computer's own use is counted.
+    """
+
+    def read(self) -> dict[str, tuple[int, int]]:
+        import re
+        import subprocess
+        from clarinet.collector.arp_scanner import host_identity
+        me = host_identity()
+        if me is None:
+            return {}
+        try:
+            out = subprocess.run(["netstat", "-e"], capture_output=True, text=True, timeout=10, errors="replace").stdout
+        except (OSError, subprocess.SubprocessError):
+            return {}
+        m = re.search(r"^\s*Bytes\s+(\d+)\s+(\d+)", out, re.MULTILINE)
+        return {me["mac"]: (int(m.group(1)), int(m.group(2)))} if m else {}
+
+
 # ─── Module-level source (injectable) ────────────────────────────────────────
 
 _source: TrafficSource = NullSource()
@@ -143,7 +164,7 @@ def _write_deltas(deltas: dict[str, tuple[int, int]]) -> None:
 
     with _lock:
         with SessionLocal() as db:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)        # stored in UTC hour buckets; pages convert to the local day
             today = now.date().isoformat()
             hour = now.hour
 

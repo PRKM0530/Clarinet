@@ -48,8 +48,20 @@ def decide_admin_request(db: Session, member_id: int, approve: bool, actor_id: i
     return member
 
 
+def is_clarinet_host(ip: str) -> bool:
+    """True when the request comes from the computer Clarinet itself runs on. A speed test there would only
+    measure that computer talking to itself, not the network, so it is not offered."""
+    if ip in ("127.0.0.1", "::1"):
+        return True
+    from clarinet.collector.arp_scanner import _local_ip
+    return bool(ip) and ip == _local_ip()
+
+
 def detect_device(db: Session, ip: str) -> Device | None:
     """The device the scan knows at this address (the one the person is browsing from)."""
+    if ip in ("127.0.0.1", "::1"):
+        from clarinet.collector.arp_scanner import _local_ip          # the address this computer has on the network
+        ip = _local_ip() or ip
     return db.query(Device).filter(Device.ip_address == ip).first() if ip else None
 
 

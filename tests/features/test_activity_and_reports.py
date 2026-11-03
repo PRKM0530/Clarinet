@@ -171,11 +171,11 @@ def test_the_usage_page_breakdown_only_covers_what_the_viewer_may_see(db):
     _usage_and_lookups(db, theirs, when, 9000, 0, {"GAMING": 1})
     activity.classify_recent(db)
 
-    member = login("alice", "pw-alice-1").get("/api/usage/summary?period=today").json()
+    member = login("alice", "pw-alice-1").get("/api/usage/summary?period=week").json()
     assert member["by_activity"] == {"STREAMING": 1000}
-    everyone = login("boss", "pw-boss-1").get("/api/usage/summary?period=today").json()
+    everyone = login("boss", "pw-boss-1").get("/api/usage/summary?period=week").json()
     assert everyone["by_activity"] == {"GAMING": 9000, "STREAMING": 1000}
-    page = login("alice", "pw-alice-1").get("/usage?period=today").text
+    page = login("alice", "pw-alice-1").get("/usage?period=week").text
     assert "Streaming" in page and "Gaming" not in page
 
 
@@ -201,85 +201,3 @@ def _traffic(db, device, day, b_in, b_out, hour=12):
     db.commit()
 
 
-def test_a_daily_report_adds_up_the_day_and_compares_with_the_day_before(db):
-    from clarinet.core_svc.reports import build_report
-    alice, boss, mine, theirs = make_world(db)
-    yesterday = date.today() - timedelta(days=1)
-    _traffic(db, mine, yesterday, 3_000_000, 1_000_000, hour=20)
-    _traffic(db, theirs, yesterday, 6_000_000, 0, hour=9)
-    _traffic(db, mine, yesterday - timedelta(days=1), 5_000_000, 0)
-
-    report = build_report(db, boss, "day", yesterday)
-    assert (report.total_bytes, report.bytes_in, report.bytes_out) == (10_000_000, 9_000_000, 1_000_000)
-    assert report.previous_total == 5_000_000 and report.change_pct == 100.0
-    assert report.peak_hour in (9, 20)
-    assert [t["device"].label for t in report.top_devices] == ["OTHER-PHONE", "ALICE-LAPTOP"]
-
-
-def test_a_weekly_report_has_a_bar_for_every_day_including_quiet_ones(db):
-    from clarinet.core_svc.reports import build_report
-    _, boss, mine, _ = make_world(db)
-    end = date.today() - timedelta(days=1)
-    _traffic(db, mine, end, 1_000, 0)
-    _traffic(db, mine, end - timedelta(days=3), 2_000, 0)
-    report = build_report(db, boss, "week", end)
-    assert len(report.by_day) == 7
-    assert report.by_day[end.isoformat()] == 1_000
-    assert sum(report.by_day.values()) == 3_000
-    assert report.start == (end - timedelta(days=6)).isoformat()
-
-
-def test_a_report_with_no_earlier_data_has_no_percentage(db):
-    from clarinet.core_svc.reports import build_report
-    _, boss, mine, _ = make_world(db)
-    day = date.today() - timedelta(days=1)
-    _traffic(db, mine, day, 100, 0)
-    assert build_report(db, boss, "day", day).change_pct is None
-
-
-def test_a_member_report_only_covers_their_own_devices_and_has_no_network_extras(db):
-    from clarinet.core_svc.reports import build_report
-    alice, boss, mine, theirs = make_world(db)
-    day = date.today() - timedelta(days=1)
-    _traffic(db, mine, day, 1_000, 0)
-    _traffic(db, theirs, day, 9_000, 0)
-    start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
-    db.add(SlowdownEvent(started_at=start + timedelta(hours=2), ended_at=start + timedelta(hours=2, minutes=30)))
-    db.add(Alert(level="WARNING", type="SLOWDOWN", title="mine", message="x", device_id=mine.device_id,
-                 raised_at=start + timedelta(hours=1)))
-    db.add(Alert(level="CRITICAL", type="ARP_SPOOF", title="network", message="x", raised_at=start + timedelta(hours=1)))
-    db.commit()
-
-    mine_report = build_report(db, alice, "day", day)
-    assert mine_report.total_bytes == 1_000
-    assert mine_report.alerts == 1
-    assert (mine_report.new_devices, mine_report.slowdown_minutes, mine_report.limit_pct) == (None, None, None)
-
-    admin_report = build_report(db, boss, "day", day)
-    assert admin_report.total_bytes == 10_000
-    assert admin_report.alerts == 2
-    assert admin_report.slowdown_minutes == 30
-
-
-def test_the_reports_page_works_for_every_view_and_survives_bad_dates(db):
-    make_world(db)
-    for who in (("alice", "pw-alice-1"), ("boss", "pw-boss-1")):
-        client = login(*who)
-        for query in ("", "?view=day", "?view=week", "?view=day&date=2020-01-01", "?date=garbage",
-                      "?view=week&date=9999-12-31", "?view=%27%3E%3Cscript%3E"):
-            assert client.get("/reports" + query).status_code == 200, (who[0], query)
-
-
-def test_the_reports_page_never_shows_a_member_other_peoples_devices(db):
-    alice, _, mine, theirs = make_world(db)
-    day = date.today() - timedelta(days=1)
-    _traffic(db, mine, day, 1_000_000, 0)
-    _traffic(db, theirs, day, 9_000_000, 0)
-    page = login("alice", "pw-alice-1").get(f"/reports?view=day&date={day}").text
-    assert "ALICE-LAPTOP" in page and "OTHER-PHONE" not in page
-
-
-def test_the_reports_page_needs_a_login(db):
-    client = TestClient(app, follow_redirects=False)
-    r = client.get("/reports")
-    assert r.status_code == 302 and "/login" in r.headers["location"]

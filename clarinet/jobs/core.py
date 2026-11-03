@@ -25,8 +25,9 @@ def register(scheduler) -> None:
     """Register all M1 jobs with the APScheduler instance."""
 
     # Usage comes from the nftables accounting counters (the rules are installed by the reconcile job)
-    from clarinet.collector.traffic_counter import NftAccountingSource, set_source
-    set_source(NftAccountingSource())
+    import platform
+    from clarinet.collector.traffic_counter import HostTrafficSource, NftAccountingSource, set_source
+    set_source(HostTrafficSource() if platform.system() == "Windows" else NftAccountingSource())
 
     scheduler.add_job(
         scan_cycle,
@@ -96,7 +97,8 @@ def scan_cycle() -> None:
 
         with SessionLocal() as db:
             iface = get_setting(db, "network_interface") or ""
-            if not iface:
+            import platform
+            if not iface and platform.system() != "Windows":      # Windows reads `arp -a` and needs no interface name
                 log.debug("scan_cycle: no network_interface configured — skipping")
                 return
             scan_once(db, iface)
@@ -127,7 +129,7 @@ def aggregate_hourly() -> None:
         from datetime import date, timedelta
         from sqlalchemy import func
         from clarinet.database import SessionLocal
-        from clarinet.models import Device, UsageRecord
+        from clarinet.models import UsageRecord
         from clarinet.models.traffic import UsageDaily
 
         yesterday = (date.today() - timedelta(days=1)).isoformat()
@@ -244,15 +246,24 @@ def retention() -> None:
 def heartbeat_watchdog() -> None:
     """Alert if any collector thread has gone silent."""
     try:
-        from datetime import datetime, timedelta
+        from datetime import datetime
         from clarinet.database import SessionLocal
         from clarinet.models.traffic import CollectorHeartbeat
         from clarinet.core_svc.alerts import raise_alert
 
         with SessionLocal() as db:
+            from clarinet.core_svc.capabilities import COLLECTOR_FEATURE, unavailable
+            from clarinet.models import Alert
+            cannot = unavailable()
             now = datetime.utcnow()
             rows = db.query(CollectorHeartbeat).all()
             for hb in rows:
+                if COLLECTOR_FEATURE.get(hb.collector) in cannot:
+                    # not a fault: this computer cannot run it, and the pages say so. Close any old alert.
+                    db.query(Alert).filter(Alert.type == "COLLECTOR_SILENT", Alert.status == "OPEN",
+                                           Alert.title == f"Collector '{hb.collector}' has stopped").update({"status": "RESOLVED"})
+                    db.commit()
+                    continue
                 lag = (now - hb.last_seen).total_seconds()
                 threshold = hb.interval_s * 2
                 if lag > threshold:

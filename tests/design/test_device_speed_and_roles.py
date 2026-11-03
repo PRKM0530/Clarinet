@@ -38,20 +38,35 @@ def _add(db, device_id, mbps, minutes_ago, latency=20):
     db.commit()
 
 
-def test_slowdown_is_judged_against_the_device_itself():
+def test_slowdown_is_judged_against_the_device_itself_and_needs_two_readings():
     ids = seed_world()
     with SessionLocal() as db:
         dev = db.get(Device, ids["d_alice"])
         assert device_speed.summary(db, dev).status == "none"
-        _add(db, dev.device_id, 100, 50)
-        assert device_speed.summary(db, dev).status == "learning"
-        for i, m in enumerate((100, 100, 100)):
-            _add(db, dev.device_id, m, 40 - i * 10)
+        for minutes in (400, 390, 380, 370, 360):
+            _add(db, dev.device_id, 100, minutes)
         assert device_speed.summary(db, dev).status == "ok"
-        _add(db, dev.device_id, 40, 1)
+        _add(db, dev.device_id, 40, 20)                       # one low reading: only a possible slowdown
+        assert device_speed.summary(db, dev).status == "possible"
+        _add(db, dev.device_id, 38, 1)                        # a second one soon after: confirmed
         s = device_speed.summary(db, dev)
-        assert s.status == "much_slower" and s.slowdown_pct == 60
+        assert s.status == "much_slower" and s.reason == "speed" and s.slowdown_pct == 60
+        _add(db, dev.device_id, 98, 0.5)                      # back to normal
+        assert device_speed.summary(db, dev).status == "ok"
 
+
+def test_small_changes_and_a_long_delay():
+    ids = seed_world()
+    with SessionLocal() as db:
+        dev = db.get(Device, ids["d_bob"])
+        for minutes in (400, 390, 380, 370, 360):
+            _add(db, dev.device_id, 1.5, minutes, latency=20)
+        _add(db, dev.device_id, 0.9, 20, latency=20)          # 40% lower, but under 2 Mbps of change: noise
+        assert device_speed.summary(db, dev).status == "ok"
+        _add(db, dev.device_id, 1.5, 10, latency=400)
+        _add(db, dev.device_id, 1.5, 1, latency=420)          # delay 20 times the usual, twice in a row
+        s = device_speed.summary(db, dev)
+        assert s.status == "slower" and s.reason == "delay"
 
 def test_record_rejects_bad_numbers_and_rapid_repeats():
     ids = seed_world()
@@ -96,10 +111,11 @@ def test_same_side_panel_for_both_roles_and_members_lack_admin_items():
     seed_world()
     admin = new_client(ADMIN).get("/dashboard").text
     member = new_client(ALICE).get("/dashboard").text
-    for label in ("Dashboard", "Usage", "Devices", "Speed", "Slowdowns", "Security", "My account"):
+    for label in ("Dashboard", "Devices", "Usage", "Speed", "Alerts", "My account"):
         assert f"<span>{label}</span>" in admin and f"<span>{label}</span>" in member
-    assert "System status" in admin and "System status" not in member
-    assert "Settings" not in member.split("<main")[0] or "/settings" not in member.split("<main")[0]
+    for label in ("Security", "Settings"):                       # Manage: administrators only
+        assert f"<span>{label}</span>" in admin and f"<span>{label}</span>" not in member
+    assert 'href="/security"' not in member and 'href="/settings"' not in member
 
 
 def test_members_never_see_mode_or_time_zone():
@@ -111,14 +127,12 @@ def test_members_never_see_mode_or_time_zone():
     assert "Monitor only" not in member and "UTC" not in member
 
 
-def test_member_security_page_is_scoped():
+def test_members_have_no_security_page_of_their_own():
     seed_world()
-    page = new_client(ALICE).get("/security")
-    assert page.status_code == 200
-    assert "ALICE-ALERT" in page.text
-    assert "BOB-ALERT" not in page.text and "SECRET-SECURITY-ALERT" not in page.text
-    assert "Cafe" not in page.text and "BB:00:00:00:00:01" not in page.text
-    assert "alice-laptop" in page.text and "bob-phone" not in page.text
+    r = new_client(ALICE).get("/security")
+    assert r.status_code == 302 and r.headers["location"] == "/account"
+    page = new_client(ALICE).get("/account").text
+    assert "Sign-ins" in page and "BOB-ALERT" not in page and "SECRET-SECURITY-ALERT" not in page
 
 
 def test_sign_out_others_keeps_this_session():
@@ -134,8 +148,9 @@ def test_speed_views_per_role():
     seed_world()
     member = new_client(ALICE).get("/speed")
     assert member.status_code == 200 and "alice-laptop" in member.text and "bob-phone" not in member.text
-    admin = new_client(ADMIN).get("/speed?view=devices")
-    assert admin.status_code == 200 and "alice-laptop" in admin.text and "bob-phone" in admin.text
+    admin = new_client(ADMIN).get("/speed")
+    assert admin.status_code == 200
+    assert "printer" not in admin.text and "alice-laptop" not in admin.text and "bob-phone" not in admin.text
 
 
 def test_linux_pill_shown_when_control_is_unavailable(monkeypatch):
@@ -154,3 +169,30 @@ def test_system_status_is_admin_only_and_complete():
     assert page.status_code == 200
     for text in ("Running for", "Router", "Internet", "Memory in use", "Disk free", "Database", "Background collectors"):
         assert text in page.text
+
+
+def test_a_members_speed_and_slowdowns_are_private_to_them(monkeypatch):
+    ids = seed_world()
+    from clarinet.core_svc import device_speed
+    from clarinet.core_svc.permissions import visible_alerts
+    from clarinet.models import Alert, Member
+    with SessionLocal() as db:
+        boss, alice = db.get(Member, ids["boss"]), db.get(Member, ids["alice"])
+        shown = {d.device_id for d in device_speed.devices_for(db, boss)}
+        assert ids["d_alice"] not in shown and ids["d_bob"] not in shown      # members' devices are theirs
+        assert ids["d_free"] not in shown                                       # nobody's device: nobody's list
+        assert {d.device_id for d in device_speed.devices_for(db, alice)} == {ids["d_alice"]}
+        assert not device_speed.may_measure(boss, db.get(Device, ids["d_alice"]))
+        assert not device_speed.may_measure(boss, db.get(Device, ids["d_free"]))
+        titles_admin = {a.title for a in visible_alerts(db, boss)}
+        assert "ALICE-ALERT" not in titles_admin and "BOB-ALERT" not in titles_admin   # SLOWDOWN alerts of members
+        assert "SECRET-SECURITY-ALERT" in titles_admin                                  # network alerts stay with the admin
+        assert "ALICE-ALERT" in {a.title for a in visible_alerts(db, alice)}
+
+
+def test_the_admin_cannot_store_a_speed_result_for_a_members_device(monkeypatch):
+    ids = seed_world()
+    from clarinet.routers import devicespeed
+    monkeypatch.setattr(devicespeed, "detect_device", lambda db, ip: db.get(Device, ids["d_alice"]))
+    body = {"download_mbps": 40, "upload_mbps": 8, "latency_ms": 15}
+    assert new_client(ADMIN).post("/speed/device/result", json=body).status_code == 403

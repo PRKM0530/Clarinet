@@ -36,14 +36,8 @@ def usage_page(request: Request, db: Session = Depends(get_db)):
     bday = billing_day(db)
     usage = usage_for(db, user, period, billing_day=bday)
 
-    # How evenly the whole network's bandwidth is shared: one number, no device names, so members may see it
     from sqlalchemy import func
-    from clarinet.analytics.fairness import fairness_words, jain_index
     from clarinet.models import UsageRecord
-    totals = [t for (t,) in db.query(func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out))
-              .filter(UsageRecord.date >= usage.period_start, UsageRecord.date <= usage.period_end)
-              .group_by(UsageRecord.device_id).all()]
-    index = jain_index(totals)
     no_usage_data = (db.query(func.count(UsageRecord.record_id)).scalar() or 0) == 0
 
     return templates.TemplateResponse("usage/index.html", {
@@ -52,10 +46,9 @@ def usage_page(request: Request, db: Session = Depends(get_db)):
         "page": "usage",
         "period": period,
         "usage": usage,
-        "fairness": {"index": None if index is None else round(index, 2), "words": fairness_words(index)},
         "no_usage_data": no_usage_data,
         "device": None,
-        "device_rows": _device_rows(db, usage),
+        "device_rows": _device_rows(db, usage, user),
         "activity_rows": _activity_rows(usage),
         "by_day_json": _json_safe(usage.by_day),
         "by_hour_json": _json_safe(usage.by_hour),
@@ -91,7 +84,7 @@ def usage_device(device_id: int, request: Request, db: Session = Depends(get_db)
         "period": period,
         "usage": usage,
         "device": device,
-        "device_rows": _device_rows(db, usage),
+        "device_rows": [],                      # the table is only on the all-devices page
         "activity_rows": _activity_rows(usage),
         "by_day_json": _json_safe(usage.by_day),
         "by_hour_json": _json_safe(usage.by_hour),
@@ -167,7 +160,6 @@ def export_usage_csv(request: Request, db: Session = Depends(get_db)):
     period = _clean_period(request.query_params.get("period", "month"))
     from clarinet.core_svc.usage_service import usage_for
     from clarinet.core_svc.settings_m1 import billing_day
-    from clarinet.core_svc.exporter import rows_to_csv
     from clarinet.models import UsageRecord
 
     bday = billing_day(db)
@@ -176,16 +168,16 @@ def export_usage_csv(request: Request, db: Session = Depends(get_db)):
     from clarinet.core_svc.permissions import member_device_ids
     allowed_ids = member_device_ids(db, user)
 
-    records = (
-        db.query(UsageRecord)
-        .filter(
-            UsageRecord.device_id.in_(allowed_ids),
-            UsageRecord.date >= usage.period_start,
-            UsageRecord.date <= usage.period_end,
-        )
-        .order_by(UsageRecord.date, UsageRecord.device_id, UsageRecord.hour)
-        .all()
-    )
+    from clarinet.core_svc.usage_service import _utc_window, local_slot
+    lo, hi = _utc_window(usage.period_start, usage.period_end)
+    records = [
+        r for r in (
+            db.query(UsageRecord)
+            .filter(UsageRecord.device_id.in_(allowed_ids), UsageRecord.date >= lo, UsageRecord.date <= hi)
+            .order_by(UsageRecord.date, UsageRecord.device_id, UsageRecord.hour)
+            .all()
+        ) if usage.period_start <= local_slot(r.date, r.hour)[0] <= usage.period_end
+    ]
 
     from clarinet.core_svc.exporter import usage_to_csv
     csv_data = usage_to_csv(records)
@@ -227,14 +219,35 @@ def _activity_rows(usage) -> list[dict]:
     ]
 
 
-def _device_rows(db, usage) -> list[dict]:
-    """Per-device totals for the table, biggest first. Only devices the usage result already covers."""
-    from clarinet.models import Device
-    if not usage.by_device:
+def _device_rows(db, usage, user) -> list[dict]:
+    """Per-device totals, biggest first. Every device this person may see is listed, with zero when nothing was
+    counted for it (so an administrator can see each member's devices, and a member their own)."""
+    from clarinet.core_svc.permissions import member_device_ids
+    from clarinet.models import Device, Member
+    ids = member_device_ids(db, user)
+    if not ids:
         return []
-    devices = {d.device_id: d for d in db.query(Device).filter(Device.device_id.in_(list(usage.by_device)))}
-    rows = [
-        {"device": devices[i], "bytes_in": bi, "bytes_out": bo, "total": bi + bo}
-        for i, (bi, bo) in usage.by_device.items() if i in devices
-    ]
-    return sorted(rows, key=lambda r: r["total"], reverse=True)
+    owners = {m.member_id: m.username for m in db.query(Member)}
+
+    # Which devices is traffic really measured for here? All, none, or only this computer. A device that is not
+    # measured must not read "0 B": that would say it used nothing, when Clarinet simply cannot see it.
+    from clarinet.core_svc import capabilities
+    off, partly = capabilities.unavailable(), capabilities.limited()
+    host_mac = None
+    if "usage" in partly:
+        from clarinet.collector.arp_scanner import host_identity
+        host_mac = (host_identity() or {}).get("mac")
+
+    def counted(d) -> bool:
+        if "usage" in off:
+            return False
+        return d.mac_address.upper() == host_mac if "usage" in partly else True
+
+    rows = []
+    for d in db.query(Device).filter(Device.device_id.in_(ids)):
+        bi, bo = usage.by_device.get(d.device_id, (0, 0))
+        rows.append({"device": d, "owner": owners.get(d.owner_member_id), "bytes_in": bi, "bytes_out": bo,
+                     "total": bi + bo, "counted": counted(d) or (bi + bo) > 0})
+    from clarinet.core_svc.device_names import is_saved
+    return sorted(rows, key=lambda r: (0 if r["counted"] else 1, -r["total"], 0 if is_saved(r["device"]) else 1,
+                                       str(r["device"].label or r["device"].hostname or r["device"].mac_address).lower()))

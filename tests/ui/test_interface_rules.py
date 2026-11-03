@@ -55,10 +55,10 @@ def pages():
     rendered = {}
     for path in ("/login", "/privacy", "/guest"):
         rendered[("public", path)] = public.get(path).text
-    for path in ("/dashboard", "/devices", f"/devices/{device_id}", "/usage", "/reports", "/alerts", "/priority", "/speed",
+    for path in ("/dashboard", "/devices", f"/devices/{device_id}", "/usage", "/status", "/alerts", "/priority", "/speed",
                  "/speed/report", "/rules", "/vouchers", "/slowdowns", "/security", "/settings", "/status"):
         rendered[("admin", path)] = admin.get(path).text
-    for path in ("/dashboard", "/devices", "/usage", "/reports", "/alerts", "/priority"):
+    for path in ("/dashboard", "/devices", "/usage", "/alerts", "/priority"):
         rendered[("member", path)] = member.get(path).text
     return rendered
 

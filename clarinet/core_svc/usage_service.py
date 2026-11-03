@@ -9,6 +9,7 @@ Public API:
 """
 
 from __future__ import annotations
+from clarinet.core_svc.localtime import local_today
 
 import logging
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from clarinet.models import Device, UsageRecord
+from clarinet.models import UsageRecord
 
 log = logging.getLogger("clarinet.core_svc.usage")
 
@@ -51,9 +52,51 @@ class UsageResult:
         return round(self.total_bytes / 1_073_741_824, 3)
 
 
+def local_slot(day: str, hour: int) -> tuple[str, int]:
+    """A stored UTC (date, hour) bucket as the configured zone's (date, hour)."""
+    from datetime import datetime, timezone
+    from clarinet.core_svc.localtime import to_local
+    moment = to_local(datetime.fromisoformat(day).replace(hour=hour, tzinfo=timezone.utc))
+    return moment.date().isoformat(), moment.hour
+
+
+def _utc_window(start_date: str, end_date: str) -> tuple[str, str]:
+    """Stored dates that can hold hours of local days start..end (a zone is at most a day away from UTC)."""
+    return ((date.fromisoformat(start_date) - timedelta(days=1)).isoformat(),
+            (date.fromisoformat(end_date) + timedelta(days=1)).isoformat())
+
+
+def bytes_between(db: Session, start_date: str, end_date: str, device_ids: list[int] | None = None) -> int:
+    """Total bytes used on the local days start..end (inclusive) by the given devices (all when None)."""
+    lo, hi = _utc_window(start_date, end_date)
+    q = db.query(UsageRecord.date, UsageRecord.hour, func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out)).filter(
+        UsageRecord.date >= lo, UsageRecord.date <= hi)
+    if device_ids is not None:
+        q = q.filter(UsageRecord.device_id.in_(device_ids))
+    total = 0
+    for day, hour, size in q.group_by(UsageRecord.date, UsageRecord.hour):
+        if start_date <= local_slot(day, hour)[0] <= end_date:
+            total += int(size or 0)
+    return total
+
+
+def bytes_by_device(db: Session, start_date: str, end_date: str) -> dict[int, int]:
+    """Total bytes per device on the local days start..end (inclusive), for every device."""
+    lo, hi = _utc_window(start_date, end_date)
+    rows = (db.query(UsageRecord.device_id, UsageRecord.date, UsageRecord.hour,
+                     func.sum(UsageRecord.bytes_in + UsageRecord.bytes_out))
+            .filter(UsageRecord.date >= lo, UsageRecord.date <= hi)
+            .group_by(UsageRecord.device_id, UsageRecord.date, UsageRecord.hour))
+    totals: dict[int, int] = {}
+    for device_id, day, hour, size in rows:
+        if start_date <= local_slot(day, hour)[0] <= end_date:
+            totals[device_id] = totals.get(device_id, 0) + int(size or 0)
+    return totals
+
+
 def _date_range(period: str) -> tuple[str, str]:
     """Return (start_date_str, end_date_str) for the given period keyword."""
-    today = date.today()
+    today = local_today()
     if period == "today":
         s = today
         e = today
@@ -96,7 +139,7 @@ def usage_for(
     if period == "billing":
         from clarinet.core_svc.timeutil import billing_period_start
         start_date = billing_period_start(billing_day).isoformat()
-        end_date = date.today().isoformat()
+        end_date = local_today().isoformat()
     else:
         start_date, end_date = _date_range(period)
 
@@ -126,19 +169,23 @@ def usage_range(
     if not allowed_ids:
         return UsageResult(period_start=start_date, period_end=end_date)
 
-    # Base query
+    # Base query: a wider window of stored (UTC) dates, then each bucket is placed on its local day
+    lo, hi = _utc_window(start_date, end_date)
     q = (
         db.query(UsageRecord)
         .filter(
             UsageRecord.device_id.in_(allowed_ids),
-            UsageRecord.date >= start_date,
-            UsageRecord.date <= end_date,
+            UsageRecord.date >= lo,
+            UsageRecord.date <= hi,
         )
     )
 
     result = UsageResult(period_start=start_date, period_end=end_date)
 
     for rec in q.all():
+        local_day, local_hour = local_slot(rec.date, rec.hour)
+        if not (start_date <= local_day <= end_date):
+            continue
         result.bytes_in += rec.bytes_in
         result.bytes_out += rec.bytes_out
 
@@ -149,12 +196,12 @@ def usage_range(
         result.by_device[rec.device_id] = (bi + rec.bytes_in, bo + rec.bytes_out)
 
         # By day
-        day_total = result.by_day.get(rec.date, 0)
-        result.by_day[rec.date] = day_total + rec.bytes_in + rec.bytes_out
+        day_total = result.by_day.get(local_day, 0)
+        result.by_day[local_day] = day_total + rec.bytes_in + rec.bytes_out
 
-        # By hour
-        hr_total = result.by_hour.get(rec.hour, 0)
-        result.by_hour[rec.hour] = hr_total + rec.bytes_in + rec.bytes_out
+        # By hour (the viewer's hour of the day)
+        hr_total = result.by_hour.get(local_hour, 0)
+        result.by_hour[local_hour] = hr_total + rec.bytes_in + rec.bytes_out
 
     result.by_activity = _activity_totals(db, allowed_ids, start_date, end_date)
     return result
@@ -164,16 +211,20 @@ def _activity_totals(db: Session, device_ids: list[int], start_date: str, end_da
     """Bytes per activity type for the given devices and dates, biggest first."""
     from clarinet.models.traffic import UsageActivity
 
+    lo, hi = _utc_window(start_date, end_date)
     rows = (
-        db.query(UsageActivity.category, func.sum(UsageActivity.bytes_in + UsageActivity.bytes_out))
+        db.query(UsageActivity.date, UsageActivity.hour, UsageActivity.category,
+                 func.sum(UsageActivity.bytes_in + UsageActivity.bytes_out))
         .filter(
             UsageActivity.device_id.in_(device_ids),
-            UsageActivity.date >= start_date,
-            UsageActivity.date <= end_date,
+            UsageActivity.date >= lo,
+            UsageActivity.date <= hi,
         )
-        .group_by(UsageActivity.category)
+        .group_by(UsageActivity.date, UsageActivity.hour, UsageActivity.category)
         .all()
     )
-    totals = {category: int(total or 0) for category, total in rows if total}
+    totals: dict[str, int] = {}
+    for day, hour, category, total in rows:
+        if total and start_date <= local_slot(day, hour)[0] <= end_date:
+            totals[category] = totals.get(category, 0) + int(total)
     return dict(sorted(totals.items(), key=lambda kv: kv[1], reverse=True))
-

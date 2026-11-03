@@ -40,3 +40,63 @@
   <circle cx="26" cy="16" r="2.6" fill="currentColor"/>
 </svg>
 {% endmacro %}
+
+{# A row of tabs that switch between related pages. items: (key, href, label) #}
+{% macro tabs(items, active) %}
+<nav class="tabs" aria-label="Sections">
+  {% for key, href, label in items %}<a href="{{ href }}" class="tab{{ ' active' if key == active else '' }}"{% if key == active %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>
+{% endmacro %}
+
+{# The tabs each group of pages shares, so a group reads as one place. #}
+{% macro speed_tabs(active, is_admin) %}
+{{ tabs([('devices', '/speed?view=devices', 'Speed'), ('slowdowns', '/slowdowns', 'Slowdowns')], active) }}
+{% endmacro %}
+
+{% macro access_tabs(active) %}
+{{ tabs([('rules', '/rules', 'Time rules'), ('priority', '/priority', 'Priority'), ('guest', '/vouchers', 'Guest vouchers')], active) }}
+{% endmacro %}
+
+{% macro settings_tabs(active) %}
+{{ tabs([('settings', '/settings', 'Settings'), ('status', '/status', 'System status')], active) }}
+{% endmacro %}
+
+{# Says plainly that something cannot work on this computer. For an admin it gives the reason; a member gets the short version. #}
+{% macro unavailable_note(unavailable, keys, is_admin) %}
+{% set missing = [] %}{% for k in keys %}{% if k in unavailable %}{% set _ = missing.append(unavailable[k]) %}{% endif %}{% endfor %}
+{% if missing %}
+<div class="caution" role="note">
+  <span class="pill pill-warn">Not working on this computer</span>
+  <span>
+    {% for f in missing %}<strong>{{ f.name }}</strong>{{ ', ' if not loop.last else '' }}{% endfor %} {{ 'is' if missing|length == 1 else 'are' }} not available here{% if is_admin %}: {{ missing[0].reason }}. Run Clarinet on a Linux computer on your network, as administrator, to turn {{ 'it' if missing|length == 1 else 'them' }} on. <a href="/status">Details</a>{% else %}. Ask the administrator.{% endif %}
+  </span>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# Marks one component that cannot work on this computer. Put it in the component's own header or tile. #}
+{% macro feature_pill(unavailable, key) %}{% if key in unavailable %}<span class="pill pill-warn" title="{{ unavailable[key].reason }}">{{ 'Needs Linux' if unavailable[key].reason.startswith('This computer does not run Linux') else 'Not available' }}</span>{% endif %}{% endmacro %}
+{% macro feature_reason(unavailable, key, is_admin) %}{% if key in unavailable %}<span class="muted" style="font-size:12px">{{ unavailable[key].reason if is_admin else 'Not available on this computer.' }}.</span>{% endif %}{% endmacro %}
+
+{# Next to an action that only has an effect when Clarinet can change the network. #}
+{% macro control_pill(enforcing, can_control) %}{% if enforcing and not can_control %}<span class="pill pill-warn" title="Needs Linux and administrator rights">Linux required</span> <span class="muted" style="font-size:12px">Saved, but has no effect on this computer.</span>{% endif %}{% endmacro %}
+
+{# Marks a component that works only in part on this computer. #}
+{% macro feature_limit(limited, key) %}{% if key in limited %}<span class="pill pill-neutral" title="{{ limited[key].partial }}">This computer only</span>{% endif %}{% endmacro %}
+
+{# One plain statement of what a device can do on the network right now: its decision, and the effect. #}
+{% macro device_access(d, enforcing, can_control, hold_new, compact=False) %}
+{% set tone = 'ok' if d.state == 'APPROVED' else ('bad' if d.state == 'BLOCKED' else 'warn') %}
+{% set word = {'APPROVED': 'Approved', 'BLOCKED': 'Blocked', 'NEW': 'New', 'GUEST': 'Guest'}.get(d.state, d.state|title) %}
+<span class="pill pill-{{ tone }}">{{ word }}</span>
+{% if not compact or (enforcing and can_control) %}
+<div class="muted" style="font-size:12px;margin-top:2px">
+  {% if not enforcing %}Not controlled: Clarinet only watches
+  {% elif not can_control %}Not enforced on this computer
+  {% elif d.state == 'BLOCKED' %}No internet
+  {% elif d.state == 'GUEST' %}Internet only
+  {% elif d.state == 'NEW' and hold_new %}No internet until approved
+  {% else %}Has internet{% endif %}
+</div>
+{% endif %}
+{% endmacro %}
