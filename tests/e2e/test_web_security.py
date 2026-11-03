@@ -57,7 +57,7 @@ def test_acc06_session_cookie_flags(world):
 def test_acc06_cookie_is_dead_after_logout(world):
     c = new_client(ADMIN)
     saved = dict(c.cookies)
-    c.get("/logout")
+    c.post("/logout")
     replay = new_client()
     replay.cookies.update(saved)
     assert replay.get("/dashboard").status_code in (302, 401, 403)
@@ -88,9 +88,13 @@ def test_acc07_csv_exports_neutralise_formulas(world):
                 assert f',{cell}' not in line and f',"{cell}' not in line, f"unescaped formula cell: {line}"
 
 
-def test_acc05_logout_is_a_get_request_documented(world):
-    """GET /logout logs the user out. Low risk, recorded in the report (any page can log a user out)."""
-    assert new_client(ADMIN).get("/logout").status_code == 302
+def test_acc05_a_plain_link_cannot_log_a_user_out(world):
+    """Signing out is a POST, so another page cannot end someone's session with a link or image."""
+    c = new_client(ADMIN)
+    assert c.get("/logout").status_code == 302
+    assert c.get("/dashboard").status_code == 200, "GET /logout ended the session"
+    assert c.post("/logout").status_code == 302
+    assert c.get("/dashboard").status_code == 302
 
 
 def test_acc05_post_from_another_site_is_refused(world):
@@ -188,6 +192,6 @@ def test_login_is_recorded_and_logout_removes_the_record(world):
     c = new_client(ALICE)
     with SessionLocal() as db:
         assert db.query(ActiveSession).filter_by(member_id=world["alice"]).count() == 1
-    c.get("/logout")
+    c.post("/logout")
     with SessionLocal() as db:
         assert db.query(ActiveSession).filter_by(member_id=world["alice"]).count() == 0

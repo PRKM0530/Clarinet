@@ -68,9 +68,11 @@
         <div class="sidebar-username">{{ user.username }}</div>
         <div class="sidebar-role">{{ user.role.title() }}</div>
       </div>
-      <a href="/logout" class="sidebar-logout" title="Sign out" aria-label="Sign out">
-        <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
-      </a>
+      <form method="post" action="/logout" style="margin-left:auto;display:flex">
+        <button type="submit" class="sidebar-logout" title="Sign out" aria-label="Sign out" style="background:none;border:0;cursor:pointer;margin-left:0">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+        </button>
+      </form>
     </div>
   </div>
 </nav>

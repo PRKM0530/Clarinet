@@ -23,6 +23,7 @@ R = [
     ("GET", "/login", "public", None, "html"),
     ("POST", "/login", "public", {"username": "nobody", "password": "wrong-pass"}, "html"),
     ("GET", "/logout", "public", None, "html"),
+    ("POST", "/logout", "public", None, "html"),
     ("GET", "/setup", "public", None, "html"),
     ("POST", "/setup/admin", "public", {"username": "x1", "password": "pw-12345678", "password_confirm": "pw-12345678"}, "html"),
     ("GET", "/signup", "public", None, "html"),

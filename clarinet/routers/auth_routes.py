@@ -70,12 +70,18 @@ def login_submit(
     return RedirectResponse(url="/dashboard", status_code=302)
 
 
-# GET /logout
+# POST /logout  (a plain link must not sign anyone out: any web page could embed one)
 
-@router.get("/logout")
+@router.post("/logout")
 def logout(request: Request):
     logout_user(request)
     return RedirectResponse(url="/login", status_code=302)
+
+
+@router.get("/logout")
+def logout_link_does_nothing(request: Request):
+    """Old bookmarks and links land back on the dashboard; signing out needs the button (a POST)."""
+    return RedirectResponse(url="/dashboard", status_code=302)
 
 
 # GET / (root redirect)
