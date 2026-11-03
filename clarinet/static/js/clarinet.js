@@ -148,9 +148,39 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── Show / hide on every password field ──────────────────────────────────────
+
+function addPasswordToggles(root) {
+  (root || document).querySelectorAll('input[type="password"]').forEach(input => {
+    if (input.dataset.hasToggle) return;
+    input.dataset.hasToggle = '1';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'password-field';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'password-toggle';
+    button.setAttribute('aria-label', 'Show password');
+    button.setAttribute('aria-pressed', 'false');
+    button.innerHTML = '<i class="bi bi-eye" aria-hidden="true"></i>';
+    button.addEventListener('click', () => {
+      const reveal = input.type === 'password';
+      input.type = reveal ? 'text' : 'password';
+      button.setAttribute('aria-pressed', String(reveal));
+      button.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
+      button.innerHTML = `<i class="bi ${reveal ? 'bi-eye-slash' : 'bi-eye'}" aria-hidden="true"></i>`;
+    });
+    wrap.appendChild(button);
+  });
+}
+
 // ── Sidebar mobile toggle ─────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  addPasswordToggles();
   const btn  = document.getElementById('sidebar-toggle');
   const nav  = document.getElementById('sidebar');
 

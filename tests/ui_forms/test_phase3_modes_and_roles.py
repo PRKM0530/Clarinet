@@ -20,21 +20,17 @@ def network_ready(monkeypatch):
 FULL_ONLY = [("/rules", "Time rules"), ("/vouchers", "Guest vouchers"), ("/priority", "Priority")]
 
 
-@pytest.mark.parametrize("mode", ["MONITOR", "PUBLIC"])
+@pytest.mark.parametrize("mode", ["MONITOR"])
 def test_features_that_need_full_control_are_hidden_outside_it(mode):
     seed_world(mode)
     for who in (ADMIN, ALICE):
         c = new_client(who)
         page = c.get("/dashboard").text
         for path, _ in FULL_ONLY:
-            if mode == "PUBLIC" and path == "/vouchers":
-                continue                                          # Public mode holds new devices back until a voucher is used
             assert f'href="{path}"' not in page, f"{who[0]} in {mode} is offered {path}"
         for path, name in FULL_ONLY:
             if who == ALICE and path != "/priority":
                 continue                                          # members cannot open the others at all
-            if mode == "PUBLIC" and path == "/vouchers":
-                continue
             body = c.get(path).text
             assert "needs Full Control mode" in body, f"{who[0]} on {path} in {mode}"
 
@@ -119,9 +115,10 @@ def test_members_can_read_speed_results_but_not_run_or_export():
     assert "Run speed test" in new_client(ADMIN).get("/speed").text
 
 
-def test_speed_test_button_is_hidden_in_public_mode():
-    seed_world("PUBLIC")
-    assert "Run speed test" not in new_client(ADMIN).get("/speed").text
+def test_speed_test_button_is_offered_in_every_mode():
+    for mode in ("FULL", "MONITOR"):
+        seed_world(mode)
+        assert "Run speed test" in new_client(ADMIN).get("/speed").text
 
 
 def test_member_cannot_use_the_speed_actions():

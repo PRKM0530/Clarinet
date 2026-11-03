@@ -5,7 +5,7 @@ Speed-test results, ISP plan view, and API summary.
 Added (M2):
 - /api/speed/summary JSON (contract C-09)
 - /speed/export.csv speed test CSV export
-- Mode-aware display (MONITOR shows "approximate" note, PUBLIC shows unavailable)
+- Mode-aware display (MONITOR shows "approximate" note)
 - Manual trigger returns JSON status
 """
 from __future__ import annotations
@@ -29,10 +29,33 @@ router = APIRouter(prefix="/speed", tags=["speed"])
 
 @router.get("", response_class=HTMLResponse)
 def speed_page(request: Request, db: Session = Depends(get_db)):
+    """
+    Two different measurements, kept apart:
+      internet  - measured at the gateway by the Clarinet computer (administrators)
+      devices   - measured from each device itself (a member sees only their own devices)
+    """
     result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
+
+    view = "devices" if (not user.is_admin or request.query_params.get("view") == "devices") else "internet"
+    context = {
+        "request": request, "user": user, "page": "speed", "view": view,
+        "error": request.query_params.get("error"), "info": request.query_params.get("info"),
+    }
+
+    if view == "devices":
+        from clarinet.auth import client_ip
+        from clarinet.core_svc import device_speed
+        from clarinet.core_svc.accounts import detect_device
+        here = detect_device(db, client_ip(request))
+        context.update({
+            "cards": [device_speed.summary(db, d) for d in device_speed.devices_for(db, user)],
+            "this_device": here,
+            "can_test_here": bool(here is not None and (user.is_admin or here.owner_member_id == user.member_id)),
+        })
+        return templates.TemplateResponse("speed/index.html", context)
 
     from clarinet.app_settings import get_setting
     from clarinet.enforcer.mode import get_mode
@@ -50,30 +73,21 @@ def speed_page(request: Request, db: Session = Depends(get_db)):
     latest = results[0] if results else None
 
     from clarinet.core_svc.localtime import local_filter
-    chart_labels = [local_filter(r.tested_at) for r in reversed(results[:30])]
-    chart_dl = [r.download_mbps for r in reversed(results[:30])]
-    chart_ul = [r.upload_mbps for r in reversed(results[:30])]
-    chart_lat = [r.latency_ms for r in reversed(results[:30])]
-
     from clarinet.collector.speed_test import is_running
-    return templates.TemplateResponse("speed/index.html", {
-        "request": request,
-        "user": user,
-        "page": "speed",
+    context.update({
         "results": results,
         "latest": latest,
         "plan_download": plan_download,
         "plan_upload": plan_upload,
-        "chart_labels": chart_labels,
-        "chart_dl": chart_dl,
-        "chart_ul": chart_ul,
-        "chart_lat": chart_lat,
+        "chart_labels": [local_filter(r.tested_at) for r in reversed(results[:30])],
+        "chart_dl": [r.download_mbps for r in reversed(results[:30])],
+        "chart_ul": [r.upload_mbps for r in reversed(results[:30])],
+        "chart_lat": [r.latency_ms for r in reversed(results[:30])],
         "mode": mode,
         "test_running": is_running(),
         "latest_failed": bool(latest and latest.server_host == "failed"),
-        "error": request.query_params.get("error"),
-        "info": request.query_params.get("info"),
     })
+    return templates.TemplateResponse("speed/index.html", context)
 
 
 @router.post("/run")
@@ -82,10 +96,6 @@ def trigger_speed_test(request: Request, db: Session = Depends(get_db)):
     result = require_admin(request, db)
     if isinstance(result, RedirectResponse):
         return result
-
-    from clarinet.enforcer.mode import get_mode
-    if get_mode(db) == "PUBLIC":
-        return RedirectResponse(url="/speed?error=Speed+tests+are+turned+off+in+Public+mode", status_code=302)
 
     from clarinet.collector.speed_test import run_speed_test_async, is_running
     if is_running():
@@ -152,8 +162,6 @@ def speed_summary(request: Request, db: Session = Depends(get_db)):
     from clarinet.enforcer.mode import get_mode
 
     mode = get_mode(db)
-    if mode == "PUBLIC":
-        return JSONResponse({"available": False, "reason": "Speed test unavailable in client mode"})
 
     plan_dl = float(get_setting(db, "plan_download_mbps", "0") or 0)
     plan_ul = float(get_setting(db, "plan_upload_mbps", "0") or 0)

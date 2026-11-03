@@ -11,7 +11,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from clarinet import templates
-from clarinet.app_settings import get_setting
 from clarinet.auth import audit, client_ip, get_session_user, hash_password, login_user
 from clarinet.core_svc.accounts import ask_for_admin
 from clarinet.database import get_db
@@ -23,14 +22,9 @@ router = APIRouter(tags=["signup"])
 MAX_ATTEMPTS_PER_HOUR = 10
 
 
-def signup_enabled(db: Session) -> bool:
-    return (get_setting(db, "signup_enabled", "true") or "true").lower() != "false"
-
-
 def _page(request, db, error="", username="", want_admin=False, status=200):
     return templates.TemplateResponse("auth/signup.html", {
-        "request": request, "error": error, "username_val": username, "want_admin": want_admin,
-        "enabled": signup_enabled(db)}, status_code=status)
+        "request": request, "error": error, "username_val": username, "want_admin": want_admin}, status_code=status)
 
 
 @router.get("/signup", response_class=HTMLResponse)
@@ -57,9 +51,6 @@ def signup(
         return RedirectResponse(url="/setup", status_code=302)
     username = username.strip()
     asked = want_admin == "yes"
-    if not signup_enabled(db):
-        return _page(request, db, "Sign-up is turned off on this network. Ask an administrator for an account.", username, asked, 403)
-
     ip = client_ip(request)
     recent = db.query(func.count(SignupAttempt.attempt_id)).filter(
         SignupAttempt.ip_address == ip, SignupAttempt.attempted_at >= datetime.utcnow() - timedelta(hours=1)).scalar() or 0
@@ -87,4 +78,12 @@ def signup(
     if asked:
         ask_for_admin(db, member)
     login_user(request, member, db)
-    return RedirectResponse(url="/dashboard?info=" + ("welcome_admin_asked" if asked else "welcome"), status_code=302)
+    from clarinet.core_svc import recovery
+    return templates.TemplateResponse("auth/recovery_code.html", {
+        "request": request,
+        "title": "Your account is ready",
+        "intro": "This is your recovery code. It is the only way to get back in if you forget your password.",
+        "code": recovery.issue(db, member),
+        "continue_url": "/dashboard?info=" + ("welcome_admin_asked" if asked else "welcome"),
+        "continue_label": "Continue to the dashboard",
+    })

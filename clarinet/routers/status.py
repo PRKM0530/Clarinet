@@ -69,7 +69,7 @@ def topbar_api(request: Request, db: Session = Depends(get_db)):
         "new_devices": new_devices,
         "mode": mode.value,
         "mode_word": mode_word(mode),
-        "network": "private" if mode.value != "PUBLIC" else "public",
+        "network": "private",
         "network_word": network_word(mode),
         "open_alerts": open_alerts,
         "recent": [
@@ -96,6 +96,7 @@ def status_page(request: Request, db: Session = Depends(get_db)):
     from clarinet.app_settings import get_setting
     from clarinet.core_svc.mode import parse_mode, mode_word, network_word, can_enforce
     from clarinet.core_svc.limit_service import get_limit_summary
+    from clarinet.core_svc.system_status import human_duration, snapshot
     from clarinet.models import Alert, Device
 
     raw_mode = get_setting(db, "network_mode") or "MONITOR"
@@ -127,5 +128,7 @@ def status_page(request: Request, db: Session = Depends(get_db)):
         "limit": limit,
         "iface": get_setting(db, "network_interface") or "—",
         "router_ip": get_setting(db, "router_ip") or "—",
+        "system": snapshot(db),
+        "human_duration": human_duration,
     })
 

@@ -1,23 +1,32 @@
 {% extends "base_app.html" %}
-{% block title %}Speed & Plan{% endblock %}
-{% block page_title %}Speed & Plan{% endblock %}
+{% from "_ui.html" import device_ref, pill, metric %}
+{% block title %}Speed{% endblock %}
+{% block page_title %}Speed{% endblock %}
 {% block content %}
+{% if user.is_admin %}
+<nav class="tabs" aria-label="Speed views">
+  <a href="/speed?view=internet" class="tab {{ 'active' if view == 'internet' else '' }}"{% if view == 'internet' %} aria-current="page"{% endif %}>Internet connection</a>
+  <a href="/speed?view=devices" class="tab {{ 'active' if view == 'devices' else '' }}"{% if view == 'devices' %} aria-current="page"{% endif %}>Devices</a>
+</nav>
+{% endif %}
+
+{% if view == 'devices' %}
+{% include "speed/_devices.html" %}
+{% else %}
 
 <div class="page-header">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
     <div>
-      <h2>Speed & Plan</h2>
-      <p>ISP plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} ↓ / {{ plan_upload|round(0)|int }} ↑ Mbps</strong></p>
+      <h2>Internet connection</h2>
+      <p>Measured at the gateway by the Clarinet computer, not from any one device. Your plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} ↓ / {{ plan_upload|round(0)|int }} ↑ Mbps</strong></p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       {% if user.is_admin %}
       <a href="/speed/report" class="btn btn-secondary">Report for your provider</a>
       <a href="/speed/export.csv" class="btn btn-secondary">Export CSV</a>
-      {% if net_mode != 'PUBLIC' %}
       <form method="post" action="/speed/run">
         <button class="btn btn-primary">Run speed test now</button>
       </form>
-      {% endif %}
       {% endif %}
     </div>
   </div>
@@ -107,9 +116,13 @@
     </table>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% if view == 'devices' %}
+<script src="/static/js/device_speed.js"></script>
+{% else %}
 <script>
 const labels  = {{ chart_labels | tojson }};
 const dlData  = {{ chart_dl    | tojson }};
@@ -136,4 +149,5 @@ new Chart(document.getElementById('speedChart'), {
   }
 });
 </script>
+{% endif %}
 {% endblock %}

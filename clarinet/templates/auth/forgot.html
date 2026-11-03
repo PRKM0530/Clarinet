@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Forgot your password{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="auth-logo">Clarinet</div>
+  <div class="auth-title">Forgot your password?</div>
+  <div class="auth-sub">Enter your username and the recovery code you were given when you made your account, then choose a new password.</div>
+
+  {% if error %}<div class="flash-bar error" style="margin:0 0 16px" role="alert">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/forgot">
+    <div class="form-group">
+      <label class="form-label" for="username">Username</label>
+      <input type="text" id="username" name="username" class="form-input" value="{{ username_val }}" autocomplete="username" required autofocus />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="recovery_code">Recovery code</label>
+      <input type="text" id="recovery_code" name="recovery_code" class="form-input" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="new_password">New password</label>
+      <input type="password" id="new_password" name="new_password" class="form-input" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="confirm_password">Repeat the new password</label>
+      <input type="password" id="confirm_password" name="confirm_password" class="form-input" autocomplete="new-password" required />
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg" style="width:100%">Set the new password</button>
+  </form>
+
+  <p class="muted small" style="margin-top:16px">Lost the code too? Sign in is not possible without it, because no one else can reset your password. Create a new account, or ask whoever runs this network to remove the old one.
+    Administrators recover with a command on the computer that runs Clarinet (see the README).</p>
+  <p style="text-align:center;margin-top:12px;font-size:13px"><a href="/login">Back to sign in</a></p>
+</div>
+{% endblock %}

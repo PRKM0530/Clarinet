@@ -35,12 +35,10 @@ def _set(db: Session, key: str, value: str) -> None:
 
 
 def _wizard_extras() -> dict:
-    """What the wizard offers for the network step: this machine's interfaces, router and time zone."""
-    from clarinet.core_svc import netinfo
+    """What the wizard needs: the time zones, and the time zone this computer is in.
+    The network connection and the router are found automatically, so they are not asked for."""
     from clarinet.core_svc.localtime import common_zones, machine_zone
-    interfaces = netinfo.list_interfaces()
-    return {"interfaces": interfaces, "default_interface": interfaces[0] if interfaces else "",
-            "default_gateway": netinfo.detect_gateway() or "", "zones": common_zones(), "machine_zone": machine_zone()}
+    return {"zones": common_zones(), "machine_zone": machine_zone()}
 
 
 # GET /setup
@@ -66,6 +64,7 @@ def wizard_create_admin(
     password: str = Form(...),
     password_confirm: str = Form(...),
     network_mode: str = Form("MONITOR"),
+    hold_new_devices: list[str] = Form([]),
     plan_download: float = Form(100.0),
     plan_upload: float = Form(20.0),
     billing_day: int = Form(1),
@@ -88,7 +87,7 @@ def wizard_create_admin(
         errors.append("Password must be at least 8 characters.")
     if password != password_confirm:
         errors.append("Passwords do not match.")
-    if network_mode not in ("FULL", "MONITOR", "PUBLIC"):
+    if network_mode not in ("FULL", "MONITOR"):
         errors.append("Invalid network mode.")
     if not (1 <= billing_day <= 28):
         errors.append("Billing day must be between 1 and 28.")
@@ -111,7 +110,7 @@ def wizard_create_admin(
         except ValueError:
             errors.append("The router address must be an IP address such as 192.168.1.1, or left empty.")
     if not valid_zone(timezone):
-        errors.append("Choose a time zone from the list.")
+        timezone = machine_zone()          # found automatically; the browser normally supplies the real one
 
     limit_bytes = ""
     if monthly_limit_gb.strip():
@@ -159,6 +158,7 @@ def wizard_create_admin(
 
     # Persist settings
     _set(db, "network_mode", network_mode)
+    _set(db, "hold_new_devices", "true" if "true" in hold_new_devices and network_mode == "FULL" else "false")
     _set(db, "plan_download_mbps", str(plan_download))
     _set(db, "plan_upload_mbps", str(plan_upload))
     _set(db, "billing_day", str(billing_day))

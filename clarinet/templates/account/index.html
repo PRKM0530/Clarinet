@@ -42,7 +42,28 @@
       </div>
       <button type="submit" class="btn btn-primary" style="width:100%">Change password</button>
     </form>
-    <p class="muted" style="margin-top:14px">Other devices where you are signed in will be signed out. If you forget your password, ask an administrator to reset it.</p>
+    <p class="muted" style="margin-top:14px">Other devices where you are signed in will be signed out.</p>
   </div>
 </div>
+
+{% if not user.is_admin %}
+<div class="card" style="max-width:480px;margin-top:20px">
+  <div class="card-header"><span class="card-header-title">Recovery code</span></div>
+  <div class="card-body">
+    {% if has_recovery_code %}
+    <p>You have a recovery code. If you forget your password, the <a href="/forgot">Forgot your password?</a> page uses it to set a new one.</p>
+    <p class="muted">Making a new code replaces the old one. The code is shown once, and no one else, including an administrator, can reset your password.</p>
+    {% else %}
+    <p><strong>You do not have a recovery code yet.</strong> Without one, a forgotten password cannot be reset. Make one now and keep it somewhere safe.</p>
+    {% endif %}
+    <form method="post" action="/account/recovery-code">
+      <div class="form-group">
+        <label class="form-label" for="recovery_current_password">Your current password</label>
+        <input id="recovery_current_password" type="password" name="current_password" class="form-input" autocomplete="current-password" required />
+      </div>
+      <button type="submit" class="btn btn-secondary">{{ 'Make a new recovery code' if has_recovery_code else 'Make my recovery code' }}</button>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

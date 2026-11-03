@@ -1,106 +1,104 @@
 {% extends "base_app.html" %}
+{% from "_mode_picker.html" import mode_picker %}
 {% block title %}Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
 {% block content %}
 <div class="page-header">
   <h2>Settings</h2>
-  <p>Network configuration, member management, and system preferences.</p>
+  <p>How Clarinet works, your internet plan, and who can use it.</p>
 </div>
 
 <div class="two-col">
 
-  <!-- Network settings -->
+  <!-- Network and internet -->
   <div class="card">
-    <div class="card-header">
-      
-      <span class="card-header-title">Network Configuration</span>
-    </div>
+    <div class="card-header"><span class="card-header-title">Network and internet</span></div>
     <div class="card-body">
       <form method="post" action="/settings/update">
-        <div class="form-group">
-          <label class="form-label" for="f-network_mode-1">Network Mode</label>
-          <select id="f-network_mode-1" name="network_mode" class="form-select">
-            <option value="MONITOR"{{ ' selected' if cfg.get('network_mode') == 'MONITOR' else '' }}>Monitor Only — view stats, no control</option>
-            <option value="FULL"{{ ' selected' if cfg.get('network_mode') == 'FULL' else '' }}>Full Control — blocking, shaping, vouchers</option>
-            <option value="PUBLIC"{{ ' selected' if cfg.get('network_mode') == 'PUBLIC' else '' }}>Public Network — guest-only access</option>
-          </select>
+
+        <h3 class="settings-heading">What Clarinet may do</h3>
+        {{ mode_picker(('FULL' if (cfg.get('network_mode') or '')|upper == 'PUBLIC' else (cfg.get('network_mode') or 'MONITOR')|upper), can_control, hold_new_devices) }}
+
+        <hr class="divider" />
+
+        <h3 class="settings-heading">Your internet plan</h3>
+        <div class="form-row">
+          <div>
+            <label class="form-label" for="f-plan_download_mbps-1">Download speed (Mbps)</label>
+            <input id="f-plan_download_mbps-1" type="number" name="plan_download_mbps" class="form-input"
+                   value="{{ cfg.get('plan_download_mbps', '100') }}" min="1" step="0.5" />
+          </div>
+          <div>
+            <label class="form-label" for="f-plan_upload_mbps-1">Upload speed (Mbps)</label>
+            <input id="f-plan_upload_mbps-1" type="number" name="plan_upload_mbps" class="form-input"
+                   value="{{ cfg.get('plan_upload_mbps', '20') }}" min="1" step="0.5" />
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="f-network_interface-1">Network Interface</label>
-          <input id="f-network_interface-1" type="text" name="network_interface" class="form-input"
-                 value="{{ cfg.get('network_interface', 'eth0') }}"
-                 placeholder="eth0 / ens3 / wlan0" />
-          <p class="form-help">The interface connected to your router.{% if interfaces_here %} On this machine: {{ interfaces_here|join(', ') }}.{% endif %}</p>
-          {% if interface_missing %}<p class="form-help" style="color:var(--red)">There is no interface called "{{ cfg.get('network_interface') }}" on this machine, so Clarinet cannot see any devices. Pick one of the names above.</p>{% endif %}
+        <div class="form-row">
+          <div>
+            <label class="form-label" for="f-billing_day-1">Your bill renews on day</label>
+            <input id="f-billing_day-1" type="number" name="billing_day" class="form-input"
+                   value="{{ cfg.get('billing_day', '1') }}" min="1" max="28" />
+          </div>
+          <div>
+            <label class="form-label" for="f-monthly_limit_gb-1">Monthly data limit in GB</label>
+            <input id="f-monthly_limit_gb-1" type="number" name="monthly_limit_gb" class="form-input" min="1" step="1" placeholder="no limit"
+                   value="{{ ((cfg.get('limit.bytes')|int) / 1073741824)|round(0)|int if cfg.get('limit.bytes') else '' }}" />
+            <div class="form-hint">Clarinet warns at 70%, 90% and 100%.</div>
+          </div>
         </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="advanced-body">
+            <p class="muted">Clarinet works these out by itself. Change them only if something is not right.</p>
+
         <div class="form-group">
           <label class="form-label" for="f-timezone-1">Time zone</label>
           <select id="f-timezone-1" name="timezone" class="form-select">
             {% for z in zones %}<option value="{{ z }}"{{ ' selected' if current_zone == z else '' }}>{{ z }}</option>{% endfor %}
           </select>
-          <p class="form-help">Times on every page and time rules (for example 22:00) use this zone.</p>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-router_ip-1">Router IP</label>
-          <input id="f-router_ip-1" type="text" name="router_ip" class="form-input"
-                 value="{{ cfg.get('router_ip', '') }}"
-                 placeholder="192.168.1.1" />
-          <p class="form-help">Used to tell a slow router from a slow internet connection. Leave empty to skip.</p>
-        </div>
-        <hr class="divider" />
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:12px">ISP Plan</div>
-        <div class="form-row">
-          <div>
-            <label class="form-label" for="f-plan_download_mbps-1">Download (Mbps)</label>
-            <input id="f-plan_download_mbps-1" type="number" name="plan_download_mbps" class="form-input"
-                   value="{{ cfg.get('plan_download_mbps', '100') }}" min="1" step="0.5" />
+          <div class="form-hint">Found automatically when Clarinet was set up. Times on every page, and rules such as 22:00, use this zone.</div>
+
+            <div class="form-group">
+              <label class="form-label" for="f-network_interface-1">Network connection</label>
+              <select id="f-network_interface-1" name="network_interface" class="form-select">
+                <option value="">Automatic{% if detected_interface %} ({{ detected_interface }}){% endif %}</option>
+                {% for i in interfaces_here %}<option value="{{ i }}"{{ ' selected' if cfg.get('network_interface') == i else '' }}>{{ i }}</option>{% endfor %}
+              </select>
+              <div class="form-hint">The connection to your router that Clarinet watches.
+                {% if interface_missing %}The one saved earlier, "{{ cfg.get('network_interface') }}", does not exist on this computer, so the automatic one is used.{% endif %}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-router_ip-1">Router address</label>
+              <input id="f-router_ip-1" type="text" name="router_ip" class="form-input" value="{{ cfg.get('router_ip', '') }}"
+                     placeholder="{{ detected_router or 'found automatically' }}" />
+              <div class="form-hint">Leave empty to use the one Clarinet found. It is used to tell a slow router from a slow internet connection.</div>
+            </div>
+            <div class="form-row">
+              <div>
+                <label class="form-label" for="f-speed_test_interval_hours-1">Test the speed every (hours)</label>
+                <input id="f-speed_test_interval_hours-1" type="number" name="speed_test_interval_hours" class="form-input"
+                       value="{{ cfg.get('speed_test_interval_hours', '6') }}" min="1" max="168" />
+              </div>
+              <div>
+                <label class="form-label" for="f-speed_threshold_pct-1">Too slow when under (% of plan)</label>
+                <input id="f-speed_threshold_pct-1" type="number" name="speed_threshold_pct" class="form-input"
+                       value="{{ speed_threshold_pct }}" min="10" max="100" step="1" />
+                <div class="form-hint">Used by the speed test, the speed report and slowdown detection.</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-slowdown_latency_multiplier-1">Slow when delay is more than (times normal)</label>
+              <input id="f-slowdown_latency_multiplier-1" type="number" name="slowdown_latency_multiplier" class="form-input"
+                     value="{{ cfg.get('slowdown_latency_multiplier', '3.0') }}" step="0.1" min="1.5" />
+              <div class="form-hint">Lower finds slowdowns sooner but may raise false alarms.</div>
+            </div>
           </div>
-          <div>
-            <label class="form-label" for="f-plan_upload_mbps-1">Upload (Mbps)</label>
-            <input id="f-plan_upload_mbps-1" type="number" name="plan_upload_mbps" class="form-input"
-                   value="{{ cfg.get('plan_upload_mbps', '20') }}" min="1" step="0.5" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-billing_day-1">Billing day of month</label>
-          <input id="f-billing_day-1" type="number" name="billing_day" class="form-input"
-                 value="{{ cfg.get('billing_day', '1') }}" min="1" max="28" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-monthly_limit_gb-1">Monthly data limit (GB, leave empty for no limit)</label>
-          <input id="f-monthly_limit_gb-1" type="number" name="monthly_limit_gb" class="form-input" min="1" step="1"
-                 value="{{ ((cfg.get('limit.bytes')|int) / 1073741824)|round(0)|int if cfg.get('limit.bytes') else '' }}" />
-          <div style="font-size:11.5px;color:var(--text-3);margin-top:4px">Clarinet warns at 70%, 90% and 100% of this amount.</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-speed_report_threshold_pct-1">Count a speed test as below plan under (% of plan)</label>
-          <input id="f-speed_report_threshold_pct-1" type="number" name="speed_report_threshold_pct" class="form-input" min="10" max="100" step="1"
-                 value="{{ cfg.get('speed_report_threshold_pct', '80') }}" />
-        </div>
-        <hr class="divider" />
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:12px">Slowdown Detection</div>
-        <div class="form-row">
-          <div>
-            <label class="form-label" for="f-slowdown_latency_multiplier-1">Latency multiplier</label>
-            <input id="f-slowdown_latency_multiplier-1" type="number" name="slowdown_latency_multiplier" class="form-input"
-                   value="{{ cfg.get('slowdown_latency_multiplier', '3.0') }}" step="0.1" min="1.5" />
-            <p class="form-help">Trigger when latency is N× the baseline.</p>
-          </div>
-          <div>
-            <label class="form-label" for="f-slowdown_speed_threshold-1">Speed threshold</label>
-            <input id="f-slowdown_speed_threshold-1" type="number" name="slowdown_speed_threshold" class="form-input"
-                   value="{{ cfg.get('slowdown_speed_threshold', '0.7') }}" step="0.05" min="0.1" max="1" />
-            <p class="form-help">Fraction of plan speed (e.g. 0.7 = 70%).</p>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="f-speed_test_interval_hours-1">Speed test interval (hours)</label>
-          <input id="f-speed_test_interval_hours-1" type="number" name="speed_test_interval_hours" class="form-input"
-                 value="{{ cfg.get('speed_test_interval_hours', '6') }}" min="1" max="24" />
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%">
-          Save Settings
-        </button>
+        </details>
+
+        <button type="submit" class="btn btn-primary">Save settings</button>
       </form>
     </div>
   </div>
@@ -135,19 +133,6 @@
     </div>
     {% endif %}
     <div class="card" style="margin-bottom:16px">
-      <div class="card-body">
-        <form method="post" action="/settings/signup" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <label class="form-label" for="signup-enabled" style="margin:0">People can create their own accounts</label>
-          <select id="signup-enabled" name="enabled" class="form-select" style="max-width:120px">
-            <option value="yes"{{ ' selected' if signup_on else '' }}>Yes</option>
-            <option value="no"{{ '' if signup_on else ' selected' }}>No</option>
-          </select>
-          <button class="btn btn-secondary btn-sm" type="submit">Save</button>
-        </form>
-        <p class="muted" style="margin:8px 0 0">New accounts are normal members. Anyone who asks for administrator access waits for your approval here.</p>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:16px">
       <div class="card-header">
         
         <span class="card-header-title">Members</span>
@@ -163,7 +148,7 @@
             <tr>
               <td>
                 <div style="display:flex;align-items:center;gap:8px">
-                  <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">
+                  <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">
                     {{ m.username[0].upper() }}
                   </div>
                   <span style="font-weight:500">{{ m.username }}</span>
@@ -178,10 +163,6 @@
               <td style="text-align:right;padding-right:14px">
                 {% if m.member_id != user.member_id %}
                 <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap">
-                  <form method="post" action="/settings/members/{{ m.member_id }}/reset-password" style="display:flex;gap:4px">
-                    <input aria-label="New password for {{ m.username }}" type="password" name="new_password" class="form-input" style="width:140px" placeholder="New password" required minlength="8" />
-                    <button class="btn btn-ghost btn-sm" title="Set a new password for {{ m.username }}">Reset password</button>
-                  </form>
                   <form method="post" action="/settings/members/{{ m.member_id }}/toggle">
                     <button class="btn btn-ghost btn-sm btn-icon" title="{{ 'Deactivate' if m.is_active else 'Activate' }}">{{ 'Deactivate' if m.is_active else 'Activate' }}</button>
                   </form>

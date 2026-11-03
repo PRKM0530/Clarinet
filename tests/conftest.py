@@ -13,6 +13,7 @@ _test_db = Path(tempfile.mkdtemp(prefix="clarinet_test_")) / "test.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_test_db.as_posix()}"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["APP_ENV"] = "test"
+os.environ["CLARINET_NO_AUTODETECT"] = "1"      # results must not depend on the computer running the tests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

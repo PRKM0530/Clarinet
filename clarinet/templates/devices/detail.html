@@ -4,7 +4,7 @@
 <span style="display:flex;align-items:center;gap:10px">
   <a href="/devices" style="color:var(--text-3);font-size:13px;font-weight:400">Devices</a>
   
-  {{ device.label or device.hostname or device.mac_address }}
+  {{ device|device_name }}
 </span>
 {% endblock %}
 {% block content %}
@@ -105,7 +105,7 @@
       <select aria-label="Other id" name="other_id" class="form-select" required>
         <option value="">Choose the entry to merge in</option>
         {% for o in others %}
-        <option value="{{ o.device_id }}">{{ o.label or o.hostname or o.mac_address }} ({{ o.mac_address }})</option>
+        <option value="{{ o.device_id }}">{{ o|device_name }} ({{ o.mac_address }})</option>
         {% endfor %}
       </select>
       <button class="btn btn-secondary" type="submit">Merge into this device</button>

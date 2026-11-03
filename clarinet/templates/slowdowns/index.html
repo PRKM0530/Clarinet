@@ -100,19 +100,6 @@
 </div>
 {% endif %}
 {% if user.is_admin %}
-<div class="card" style="margin-top:24px">
-  <div class="card-header"><span class="card-title">Detection settings</span></div>
-  <div class="card-body">
-    <form method="post" action="/slowdowns/settings" style="display:flex;gap:16px;flex-wrap:wrap;align-items:end">
-      <div><label class="form-label" for="sd-lat">Latency counts as slow above (× normal)</label>
-        <input class="form-input" id="sd-lat" name="latency_multiplier" type="number" step="0.1" min="1" max="10" value="{{ latency_mult }}"></div>
-      <div><label class="form-label" for="sd-spd">Speed counts as slow below (share of plan, 0.1–1)</label>
-        <input class="form-input" id="sd-spd" name="speed_threshold" type="number" step="0.05" min="0.1" max="1" value="{{ speed_thresh }}"></div>
-      <div><label class="form-label" for="sd-if">Wi-Fi interface (optional)</label>
-        <input class="form-input" id="sd-if" name="wifi_iface" value="{{ wifi_iface }}" placeholder="e.g. wlan0"></div>
-      <button class="btn btn-primary" type="submit">Save</button>
-    </form>
-  </div>
-</div>
+<p class="muted" style="margin-top:24px">To make detection more or less sensitive, see Settings, then Advanced.</p>
 {% endif %}
 {% endblock %}

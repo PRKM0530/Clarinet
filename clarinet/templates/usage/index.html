@@ -1,5 +1,6 @@
 {% extends "base_app.html" %}
 {% import "_modes.html" as modes %}
+{% from "_ui.html" import linux_pill %}
 {% block title %}Usage{% endblock %}
 {% block page_title %}Data usage{% endblock %}
 {% block content %}
@@ -7,7 +8,7 @@
 {% set base_url = ('/usage/device/' ~ device.device_id) if device else '/usage' %}
 
 <div class="page-header">
-  <h2>{% if device %}{{ device.label or device.hostname or device.mac_address }}{% else %}Data usage{% endif %}</h2>
+  <h2>{% if device %}{{ device|device_name }}{% else %}Data usage{% endif %}</h2>
   <p>
     {% if device %}<a href="/usage">All devices</a> &middot; {% endif %}
     {{ usage.period_start }}{% if usage.period_end != usage.period_start %} to {{ usage.period_end }}{% endif %}
@@ -50,7 +51,7 @@
 
 <div class="card section">
   <div class="card-header">
-    <span class="card-header-title">What the data was used for</span>
+    <span class="card-header-title">What the data was used for</span>{% if not linux_ok %} {{ linux_pill() }}{% endif %}
     <span class="card-header-sub">Worked out from the websites looked up, not from what was done on them</span>
   </div>
   <div class="card-body">
@@ -75,7 +76,7 @@
       <tbody>
         {% for r in device_rows %}
         <tr>
-          <td><a href="/usage/device/{{ r.device.device_id }}?period={{ period }}">{{ r.device.label or r.device.hostname or r.device.mac_address }}</a></td>
+          <td><a href="/usage/device/{{ r.device.device_id }}?period={{ period }}">{{ r.device|device_name }}</a></td>
           <td class="num">{{ r.bytes_in|size }}</td>
           <td class="num">{{ r.bytes_out|size }}</td>
           <td class="num"><strong>{{ r.total|size }}</strong></td>

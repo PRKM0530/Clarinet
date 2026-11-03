@@ -20,7 +20,9 @@ def account_page(request: Request, db: Session = Depends(get_db)):
         return result
     from clarinet.models.accounts import AdminRequest
     admin_request = db.get(AdminRequest, result.member_id)
+    from clarinet.core_svc import recovery
     return templates.TemplateResponse("account/index.html", {
+        "has_recovery_code": recovery.has_code(db, result.member_id),
         "request": request,
         "user": result,
         "page": "account",
@@ -74,3 +76,43 @@ def ask_for_admin_access(request: Request, db: Session = Depends(get_db)):
     if asked:
         audit(db, result.member_id, "ADMIN_REQUEST", "Member", result.member_id)
     return RedirectResponse(url="/account?info=" + ("admin_asked" if asked else "admin_already"), status_code=302)
+
+
+@router.post("/recovery-code", response_class=HTMLResponse)
+def new_recovery_code(
+    request: Request,
+    current_password: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Make a new recovery code (members only). The old one stops working. Needs the current password."""
+    result = require_login(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    user = result
+    if user.is_admin:
+        return RedirectResponse(url="/account?error=admin_no_recovery", status_code=302)
+    if not verify_password(current_password, user.password_hash):
+        return RedirectResponse(url="/account?error=password_wrong", status_code=302)
+
+    from clarinet.core_svc import recovery
+    code = recovery.issue(db, user)
+    audit(db, user.member_id, "NEW_RECOVERY_CODE", "Member", user.member_id)
+    return templates.TemplateResponse("auth/recovery_code.html", {
+        "request": request,
+        "title": "Your new recovery code",
+        "intro": "Your earlier code no longer works. Keep this one instead.",
+        "code": code,
+        "continue_url": "/account",
+        "continue_label": "Back to my account",
+    })
+
+
+@router.post("/sign-out-others")
+def sign_out_other_devices(request: Request, db: Session = Depends(get_db)):
+    """End every sign-in of this account except the one being used now."""
+    result = require_login(request, db)
+    if isinstance(result, RedirectResponse):
+        return result
+    end_other_sessions(db, result.member_id, request.session.get("sid"))
+    audit(db, result.member_id, "SIGN_OUT_OTHERS", "Member", result.member_id)
+    return RedirectResponse(url="/security?info=signed_out_others", status_code=302)

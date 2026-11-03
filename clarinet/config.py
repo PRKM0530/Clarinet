@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     APP_PORT: int = 8000
 
     # Network
-    NETWORK_INTERFACE: str = "eth0"
+    NETWORK_INTERFACE: str = ""        # blank: found automatically
     NETWORK_MODE: str = "MONITOR"
     # Active ARP scan on top of the neighbour table: auto (Full Control only) | on | off
     ACTIVE_DISCOVERY: str = "auto"
@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     TRUSTED_PROXIES: str = "127.0.0.1,::1"
     # Send the session cookie only over HTTPS (set true when serving through Caddy)
     COOKIE_SECURE: bool = False
-    SESSION_IDLE_MINUTES: int = 30
 
     model_config = {"env_file": BASE_DIR / ".env", "extra": "ignore"}
 

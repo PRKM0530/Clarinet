@@ -1,0 +1,42 @@
+{# Shared pieces, so the same thing looks the same on every page. #}
+
+{# A device: monogram, name and ID. Identical in every list, card and sidebar. #}
+{% macro device_ref(d, link=True) %}
+<span class="device-ref">
+  <span class="device-mono" aria-hidden="true">{{ d|device_mono }}</span>
+  <span class="device-text">
+    {% if link %}<a href="/devices/{{ d.device_id }}" class="device-name">{{ d|device_name }}</a>{% else %}<span class="device-name">{{ d|device_name }}</span>{% endif %}
+    <span class="device-id mono">{{ d.mac_address }}</span>
+  </span>
+</span>
+{% endmacro %}
+
+{# A small status label. tone: ok | warn | bad | neutral #}
+{% macro pill(text, tone='neutral', title='') %}<span class="pill pill-{{ tone }}"{% if title %} title="{{ title }}"{% endif %}>{{ text }}</span>{% endmacro %}
+
+{# Marks something that cannot work on this computer because it needs Linux. #}
+{% macro linux_pill() %}<span class="pill pill-warn" title="This feature needs Linux. It does not work on this computer.">Linux required</span>{% endmacro %}
+
+{# A banner for a whole page or section that depends on the operating system. #}
+{% macro os_banner(what) %}
+<div class="caution" role="note">
+  <span class="pill pill-warn">Linux required</span>
+  <span>{{ what }} needs Linux and administrator rights. On this computer it is shown for reference, but it does not work and nothing is changed.</span>
+</div>
+{% endmacro %}
+
+{# One measured value: a small caps label over a number. #}
+{% macro metric(label, value, unit='', tone='') %}
+<div class="metric">
+  <div class="micro">{{ label }}</div>
+  <div class="metric-value mono {{ 'tone-' ~ tone if tone else '' }}">{{ value }}{% if unit %}<span class="metric-unit">{{ unit }}</span>{% endif %}</div>
+</div>
+{% endmacro %}
+
+{# The Clarinet mark: a C that is also a signal arc with a node. One colour, so it follows the text colour. #}
+{% macro logo_mark(size=20) %}
+<svg class="logo-mark" width="{{ size }}" height="{{ size }}" viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
+  <path d="M23.2 9.4A10.2 10.2 0 1 0 23.2 22.6" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="26" cy="16" r="2.6" fill="currentColor"/>
+</svg>
+{% endmacro %}

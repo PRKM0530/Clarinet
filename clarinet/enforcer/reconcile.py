@@ -52,15 +52,15 @@ def reconcile_now(db=None) -> None:
     Make nftables match the database. Idempotent and safe to call from any thread.
 
     * counters: one pair of accounting rules per known device (Full Control and Monitor modes)
-    * Public mode: no counting; devices nobody has approved (state NEW) and guests are denied until a voucher is used
-    * Full Control only (Public mode also does the blocking and guest parts):
+    * With "keep new devices offline" on: devices nobody has approved (state NEW) and guests are denied until a voucher is used
+    * Full Control only:
         - BLOCKED devices are dropped, and blocks for devices that are no longer BLOCKED are removed
         - GUEST devices are denied unless they hold an unexpired voucher, which opens them
     """
     try:
         from datetime import datetime, timezone
         from clarinet.app_settings import get_setting
-        from clarinet.core_svc.mode import NetworkMode, parse_mode
+        from clarinet.core_svc.mode import NetworkMode, hold_new_devices, parse_mode
         from clarinet.database import SessionLocal
         from clarinet.enforcer import accounting, nft_wrapper as nft
         from clarinet.models import Device
@@ -70,19 +70,18 @@ def reconcile_now(db=None) -> None:
         session = db or SessionLocal()
         try:
             mode = parse_mode(get_setting(session, "network_mode"))
-            public = mode == NetworkMode.PUBLIC
+            hold = hold_new_devices(session)
             nft.ensure_table_exists()
             devices = session.query(Device).all()
-            if not public:
-                counted = [(d.mac_address, d.ip_address) for d in devices]
-                from clarinet.models.merging import MergedMac
-                counted += [(a.mac_address, None) for a in session.query(MergedMac).all()]    # upload side only
-                accounting.sync_accounting(counted)
+            counted = [(d.mac_address, d.ip_address) for d in devices]
+            from clarinet.models.merging import MergedMac
+            counted += [(a.mac_address, None) for a in session.query(MergedMac).all()]    # upload side only
+            accounting.sync_accounting(counted)
             if mode == NetworkMode.MONITOR:
                 return
 
             iface = get_setting(session, "network_interface", "")
-            if iface and not public:
+            if iface:
                 try:
                     from clarinet.enforcer.tc_wrapper import ensure_htb
                     ensure_htb(iface, float(get_setting(session, "plan_download_mbps", "100") or 100))
@@ -100,8 +99,9 @@ def reconcile_now(db=None) -> None:
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             vouchered = {e.mac.lower() for e in session.query(EnforcementStatus).all()
                          if e.expires_at is None or e.expires_at.replace(tzinfo=None) > now}
-            # Public mode: a device nobody has approved yet is held back like a guest until it uses a voucher
-            held = ("GUEST", "NEW") if public else ("GUEST",)
+            # With "keep new devices offline" on, a device nobody has approved yet is held back like a guest
+            # until it uses a voucher
+            held = ("GUEST", "NEW") if hold else ("GUEST",)
             guests = {d.mac_address.lower() for d in devices if d.state in held}
             for mac in guests:
                 if mac in vouchered:

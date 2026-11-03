@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 
 import pytest
 
 from tests._support import seed_world
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="builds fake Linux tools with symlinks")
 
 OOKLA = json.dumps({"download": {"bandwidth": 12_500_000}, "upload": {"bandwidth": 2_500_000},
                     "ping": {"latency": 12.5}, "server": {"host": "ookla.example"}})
@@ -84,12 +87,12 @@ def test_full_run_stores_the_result_and_flags_below_plan(tools):
         assert row.below_plan is True and row.server_host == "ookla.example"
 
 
-def test_full_run_in_public_mode_does_nothing(tools):
+def test_full_run_also_works_in_monitor_mode(tools):
     from clarinet.collector.speed_test import _do_run
     from clarinet.database import SessionLocal
     from clarinet.models import SpeedTestResult
-    seed_world("PUBLIC")
+    seed_world("MONITOR")
     tools("speedtest", OOKLA)
     _do_run()
     with SessionLocal() as db:
-        assert db.query(SpeedTestResult).count() == 0
+        assert db.query(SpeedTestResult).count() == 1

@@ -149,6 +149,28 @@ def recommend_mode(caps: dict[str, bool]) -> str:
 
 
 
+def can_control(caps: dict[str, bool] | None = None) -> bool:
+    """True when this computer can block and limit devices: Linux, administrator rights and nftables."""
+    caps = caps if caps is not None else probe_capabilities()
+    return bool(caps.get("is_linux") and caps.get("has_root") and caps.get("has_nft"))
+
+
+_capability_cache: tuple[float, bool] | None = None
+
+
+def can_control_cached(seconds: int = 60) -> bool:
+    """can_control(), remembered briefly: it runs system commands and every page asks."""
+    import time
+    global _capability_cache
+    now = time.monotonic()
+    if _capability_cache is None or now - _capability_cache[0] > seconds:
+        try:
+            _capability_cache = (now, can_control())
+        except Exception:
+            _capability_cache = (now, False)
+    return _capability_cache[1]
+
+
 def list_interfaces() -> list[str]:
     """Network interface names on this machine (without the loopback), the one carrying traffic to the internet first."""
     try:

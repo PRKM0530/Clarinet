@@ -8,6 +8,8 @@ import os
 import time
 from datetime import datetime, timezone
 
+import sys
+
 import pytest
 
 from tests._support import ADMIN, new_client, seed_world
@@ -71,6 +73,7 @@ def test_s15_speed_threshold_setting_is_used(world):
         assert _speed_below_plan_check(db) is True     # 80 Mbps is below 90% of a 100 Mbps plan
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses time.tzset, which Windows does not have")
 def test_s21_speed_csv_time_is_correct_on_a_non_utc_host(world):
     from clarinet.database import SessionLocal
     from clarinet.models import SpeedTestResult

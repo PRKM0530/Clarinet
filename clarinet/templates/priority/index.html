@@ -2,7 +2,9 @@
 {% import "_modes.html" as modes %}
 {% block title %}Priority Access{% endblock %}
 {% block page_title %}Priority Access{% endblock %}
+{% from "_ui.html" import os_banner %}
 {% block content %}
+{% if enforcing and not can_control %}{{ os_banner("Priority requests") }}{% endif %}
 {% if not enforcing %}
 {{ modes.needs_full('Priority requests', user, net_mode) }}
 {% else %}
@@ -25,7 +27,7 @@
           <label class="form-label" for="f-device_id-1">Device</label>
           <select id="f-device_id-1" name="device_id" class="form-select" required>
             {% for d in my_devices %}
-            <option value="{{ d.device_id }}">{{ d.label or d.hostname or d.mac_address }}</option>
+            <option value="{{ d.device_id }}">{{ d|device_name }}</option>
             {% endfor %}
           </select>
         </div>

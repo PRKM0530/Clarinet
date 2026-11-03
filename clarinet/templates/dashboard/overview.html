@@ -150,7 +150,7 @@
         <tr>
           <td>
             <div style="font-size:13px;font-weight:500">
-              {{ d.label or d.hostname or (d.mac_address[:14]+'…') }}
+              {{ d|device_name }}
             </div>
             <div style="font-size:11.5px;color:var(--text-3)">{{ d.vendor or d.mac_address }}</div>
           </td>
@@ -184,7 +184,7 @@
     {% for h, dev in activity %}
     <li style="padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">
       <span class="badge badge-{{ 'green' if h.event == 'JOIN' else 'gray' }}">{{ 'Joined' if h.event == 'JOIN' else 'Left' }}</span>
-      <strong>{{ dev.label or dev.hostname or dev.mac_address }}</strong>
+      <strong>{{ dev|device_name }}</strong>
       <span class="muted">{{ h.ip_address or '' }}</span>
       <span class="muted" style="float:right">{{ h.timestamp|local('%d %b %H:%M') }}</span>
     </li>

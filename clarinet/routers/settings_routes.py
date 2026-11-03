@@ -43,25 +43,31 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
     cfg = _get_all_settings(db)
     members = db.query(Member).order_by(Member.created_at).all()
     from clarinet.models.accounts import AdminRequest
-    from clarinet.routers.signup import signup_enabled
     pending = [(r, db.get(Member, r.member_id)) for r in
                db.query(AdminRequest).filter(AdminRequest.status == "PENDING").order_by(AdminRequest.requested_at)]
 
-    from clarinet.core_svc import netinfo
+    from clarinet.core_svc import autoconfig, netinfo
     from clarinet.core_svc.localtime import common_zones, configured_zone
     iface = cfg.get("network_interface", "")
+    try:
+        slow_ratio = float(cfg.get("slowdown_speed_threshold") or 0.7)
+    except ValueError:
+        slow_ratio = 0.7
     return templates.TemplateResponse("settings/index.html", {
         "zones": common_zones(),
         "current_zone": configured_zone(db),
         "interface_missing": bool(iface) and iface not in netinfo.list_interfaces() + ["lo"],
         "interfaces_here": netinfo.list_interfaces(),
+        "detected_interface": autoconfig.detected_interface(),
+        "detected_router": autoconfig.detected_router(),
+        "hold_new_devices": (cfg.get("hold_new_devices") == "true") or (cfg.get("network_mode", "").upper() == "PUBLIC"),
+        "speed_threshold_pct": round(slow_ratio * 100),
         "request": request,
         "user": user,
         "page": "settings",
         "cfg": cfg,
         "members": members,
         "admin_requests": pending,
-        "signup_on": signup_enabled(db),
         "info":  request.query_params.get("info", ""),
         "error": request.query_params.get("error", ""),
     })
@@ -85,7 +91,7 @@ def _validate_settings(params: dict) -> str | None:
     checks = [
         ("network_interface", lambda v: netinfo.interface_name_ok(v), "bad_interface"),
         ("timezone", lambda v: valid_zone(v), "bad_timezone"),
-        ("network_mode", lambda v: v.upper() in ("FULL", "MONITOR", "PUBLIC"), "bad_mode"),
+        ("network_mode", lambda v: v.upper() in ("FULL", "MONITOR"), "bad_mode"),
         ("plan_download_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
         ("plan_upload_mbps", lambda v: _number(v, 0.1, 100_000) is not None, "bad_plan_speed"),
         ("billing_day", lambda v: _number(v, 1, 28, whole=True) is not None, "bad_billing_day"),
@@ -106,12 +112,13 @@ def _validate_settings(params: dict) -> str | None:
 def update_settings(
     request: Request,
     network_mode: Optional[str]   = Form(None),
+    hold_new_devices: list[str]   = Form([]),
     network_interface: Optional[str] = Form(None),
     plan_download_mbps: Optional[str] = Form(None),
     plan_upload_mbps: Optional[str]   = Form(None),
     billing_day: Optional[str]        = Form(None),
     monthly_limit_gb: Optional[str]   = Form(None),
-    speed_report_threshold_pct: Optional[str] = Form(None),
+    speed_threshold_pct: Optional[str] = Form(None),
     speed_test_interval_hours: Optional[str] = Form(None),
     slowdown_latency_multiplier: Optional[str] = Form(None),
     slowdown_speed_threshold: Optional[str]    = Form(None),
@@ -150,7 +157,7 @@ def update_settings(
     error = _validate_settings(params)
     if error:
         return RedirectResponse(url=f"/settings?error={error}", status_code=302)
-    for key in [k for k, v in params.items() if v is not None and v.strip() == "" and k != "router_ip"]:
+    for key in [k for k, v in params.items() if v is not None and v.strip() == "" and k not in ("router_ip", "network_interface")]:
         params[key] = None                       # an empty box means "leave unchanged"
 
     # Monthly data limit: blank means no limit; otherwise GB -> bytes under "limit.bytes".
@@ -167,15 +174,20 @@ def update_settings(
                 return RedirectResponse(url="/settings?error=bad_limit", status_code=302)
             params["limit.bytes"] = str(int(gb * 1_073_741_824))
 
-    # A speed test under this share of the plan counts as "below plan" in the speed report
-    if speed_report_threshold_pct is not None and speed_report_threshold_pct.strip() != "":
-        text = speed_report_threshold_pct.strip()
+    # One number decides what counts as "too slow" for the speed test, the speed report and the slowdown
+    # diagnosis. It is typed as a percentage of the plan and stored as a fraction.
+    if speed_threshold_pct is not None and speed_threshold_pct.strip() != "":
+        text = speed_threshold_pct.strip()
         if not text.isdigit() or not (10 <= int(text) <= 100):
-            return RedirectResponse(url="/settings?error=bad_threshold", status_code=302)
-        params["speed_report_threshold_pct"] = text
+            return RedirectResponse(url="/settings?error=bad_speed_percent", status_code=302)
+        params["slowdown_speed_threshold"] = f"{int(text) / 100:g}"
 
     if params.get("network_mode"):
         params["network_mode"] = params["network_mode"].strip().upper()
+    # "Keep new devices offline": the form sends false, then true as well when the box is ticked.
+    # Nothing sent at all (a partial form) leaves the setting alone.
+    if hold_new_devices:
+        params["hold_new_devices"] = "true" if "true" in hold_new_devices else "false"
     changed = []
     for key, val in params.items():
         if val is not None:
@@ -188,6 +200,9 @@ def update_settings(
     if "timezone" in changed:
         from clarinet.core_svc.localtime import reset_cache
         reset_cache()
+    if "network_interface" in changed or "router_ip" in changed:
+        from clarinet.core_svc.autoconfig import forget
+        forget()
     if changed:
         audit(db, user.member_id, "UPDATE_SETTINGS", detail={"changed": changed})
 
@@ -279,33 +294,6 @@ def toggle_member(member_id: int, request: Request, db: Session = Depends(get_db
     return RedirectResponse(url="/settings", status_code=302)
 
 
-# POST /settings/members/{member_id}/reset-password
-
-@router.post("/members/{member_id}/reset-password")
-def reset_password(
-    member_id: int,
-    request: Request,
-    new_password: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    result = require_admin(request, db)
-    if isinstance(result, RedirectResponse):
-        return result
-    user = result
-
-    if len(new_password) < 8:
-        return RedirectResponse(url="/settings?error=password_too_short", status_code=302)
-
-    member = db.get(Member, member_id)
-    if member:
-        member.password_hash = hash_password(new_password)
-        member.failed_attempts = 0
-        member.locked_until = None
-        audit(db, user.member_id, "RESET_PASSWORD", "Member", member_id)
-        db.commit()
-        from clarinet.auth import end_sessions
-        end_sessions(db, member_id)
-    return RedirectResponse(url="/settings?info=password_reset", status_code=302)
 
 
 # Administrator-access requests and the sign-up switch
@@ -331,13 +319,3 @@ def approve_admin_request(member_id: int, request: Request, db: Session = Depend
 def decline_admin_request(member_id: int, request: Request, db: Session = Depends(get_db)):
     return _decide(member_id, False, request, db)
 
-
-@router.post("/signup")
-def set_signup(request: Request, enabled: str = Form("yes"), db: Session = Depends(get_db)):
-    result = require_admin(request, db)
-    if isinstance(result, RedirectResponse):
-        return result
-    on = enabled == "yes"
-    _set(db, "signup_enabled", "true" if on else "false")
-    audit(db, result.member_id, "UPDATE_SETTINGS", detail={"changed": ["signup_enabled"], "value": on})
-    return RedirectResponse(url="/settings?info=" + ("signup_on" if on else "signup_off"), status_code=302)

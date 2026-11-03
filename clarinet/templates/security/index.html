@@ -1,6 +1,7 @@
 {% extends "base_app.html" %}
 {% block title %}Security{% endblock %}
 {% block page_title %}Security{% endblock %}
+{% from "_ui.html" import linux_pill %}
 {% block content %}
 <div class="page-header">
   <h2>Security</h2>
@@ -246,4 +247,17 @@
     </table>
   </div>
 </div>
+
+<section class="section">
+  <div class="micro section-label">Detection that needs Linux</div>
+  <div class="card">
+    <table class="cl-table">
+      <tbody>
+        <tr><td>ARP spoofing</td><td class="muted">Notices a device pretending to be another, such as your router.</td><td class="num">{% if not linux_ok %}{{ linux_pill() }}{% else %}<span class="pill pill-ok">Available</span>{% endif %}</td></tr>
+        <tr><td>Port scans</td><td class="muted">Notices a device probing many ports on the network.</td><td class="num">{% if not linux_ok %}{{ linux_pill() }}{% else %}<span class="pill pill-ok">Available</span>{% endif %}</td></tr>
+        <tr><td>Website lookups</td><td class="muted">Needed to sort usage into streaming, browsing and so on.</td><td class="num">{% if not linux_ok %}{{ linux_pill() }}{% else %}<span class="pill pill-ok">Available</span>{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endblock %}

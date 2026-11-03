@@ -65,9 +65,9 @@ def setting(key):
 
 # The role matrix
 
-ADMIN_ONLY = ["/rules", "/vouchers", "/security", "/settings", "/status"]
+ADMIN_ONLY = ["/rules", "/vouchers", "/settings", "/status"]
 # Speed results and slowdown explanations are read-only for members (Clarinet_System_Documentation.pdf role matrix)
-MEMBER_AND_ADMIN = ["/dashboard", "/devices", "/usage", "/alerts", "/priority", "/speed", "/slowdowns"]
+MEMBER_AND_ADMIN = ["/dashboard", "/devices", "/usage", "/alerts", "/priority", "/speed", "/slowdowns", "/security"]
 PUBLIC = ["/login", "/guest", "/api/status/health", "/privacy"]
 
 
@@ -103,11 +103,11 @@ def test_admin_can_open_every_page(world, path):
 
 def test_the_sidebar_hides_admin_pages_from_members(world):
     page = member().get("/dashboard").text
-    for hidden in ("/rules", "/vouchers", "/security", "/settings", "/status"):
+    for hidden in ("/rules", "/vouchers", "/settings", "/status"):
         assert f'href="{hidden}"' not in page, f"member sidebar links to {hidden}"
     assert 'href="/priority"' in page and 'href="/usage"' in page
     assert 'href="/speed"' in page and 'href="/slowdowns"' in page and 'href="/account"' in page
-    assert 'href="/security"' in admin().get("/dashboard").text
+    assert 'href="/security"' in page and 'href="/security"' in admin().get("/dashboard").text   # same item, a member-sized page
 
 
 def test_a_guest_has_no_dashboard_access_after_redeeming(world):

@@ -31,7 +31,7 @@ def client_for(username=None, password=None):
     return client
 
 
-SECURITY_GETS = ["/security", "/security/summary"]
+SECURITY_GETS = ["/security/summary"]       # /security itself is open to members, as their own smaller page
 SECURITY_POSTS = [
     "/security/router-audit/run",
     "/security/wifi/scan",
@@ -129,7 +129,7 @@ def test_every_admin_router_page_refuses_a_member(accounts):
     /devices and /alerts are open to members on purpose (scoped to their own
     devices), so they are covered by the tests below instead.
     """
-    admin_pages = ["/rules", "/vouchers", "/settings", "/security"]
+    admin_pages = ["/rules", "/vouchers", "/settings", "/status"]
     client = client_for("kid", "pw-member-1")
     leaked = [p for p in admin_pages if client.get(p).status_code == 200]
     assert leaked == [], f"members can open admin pages: {leaked}"

@@ -199,7 +199,9 @@ def export_usage_csv(request: Request, db: Session = Depends(get_db)):
 
 def _json_safe(d: dict) -> str:
     import json
-    return json.dumps({str(k): v for k, v in d.items()})
+    text = json.dumps({str(k): v for k, v in d.items()})
+    # this goes inside a <script> block, so data must not be able to write "</script>"
+    return text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
 def _clean_period(period: str) -> str:

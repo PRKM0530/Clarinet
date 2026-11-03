@@ -3,6 +3,8 @@ Phase 2: sign-up, administrator-access requests, device claims and password reco
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from tests._support import ADMIN, ALICE, BOB, new_client, reset_db, seed_world
@@ -34,7 +36,8 @@ def alerts(kind):
 def test_signup_creates_a_member_and_signs_them_in(world):
     c = new_client()
     r = c.post("/signup", data=SIGNUP)
-    assert r.status_code == 302 and r.headers["location"].startswith("/dashboard")
+    assert r.status_code == 200 and "Your account is ready" in r.text          # the recovery code is shown once
+    assert re.search(r"[A-Z2-9]{4}(-[A-Z2-9]{4}){3}", r.text)
     assert member("newbie").role == "MEMBER"
     assert c.get("/dashboard").status_code == 200
     assert "Welcome to Clarinet" in c.get("/dashboard?info=welcome").text
@@ -67,24 +70,35 @@ def test_signup_is_limited_per_address(world):
     assert codes[:10] == [422] * 10 and codes[10] == 429
 
 
-def test_login_page_links_to_signup_and_explains_recovery(world):
+def test_login_page_links_to_signup_and_to_password_recovery(world):
     page = new_client().get("/login").text
-    assert 'href="/signup"' in page and "Ask an administrator" in page
+    assert 'href="/signup"' in page and 'href="/forgot"' in page and "Ask an administrator" not in page
 
 
-def test_admin_can_switch_sign_up_off_and_on(world):
-    admin = new_client(ADMIN)
-    assert "info=signup_off" in admin.post("/settings/signup", data={"enabled": "no"}).headers["location"]
-    assert 'href="/signup"' not in new_client().get("/login").text
-    r = new_client().post("/signup", data=SIGNUP)
-    assert r.status_code == 403 and member("newbie") is None
-    admin.post("/settings/signup", data={"enabled": "yes"})
-    assert new_client().post("/signup", data=SIGNUP).status_code == 302
+def test_the_create_account_link_is_still_there_after_a_wrong_sign_in(world):
+    """It used to vanish: the failed sign-in page was drawn without the information that sign-up is open."""
+    c = new_client()
+    r = c.post("/login", data={"username": "nobody", "password": "wrong-password"})
+    assert r.status_code == 401 and "Invalid username or password" in r.text
+    assert 'href="/signup"' in r.text and 'href="/forgot"' in r.text
+    r = c.post("/login", data={"username": ALICE[0], "password": "also-wrong-1"})
+    assert 'href="/signup"' in r.text
 
 
-def test_a_member_cannot_switch_sign_up(world):
-    r = new_client(ALICE).post("/settings/signup", data={"enabled": "no"})
-    assert r.headers["location"].startswith("/dashboard?error=forbidden")
+def test_sign_up_is_always_open_and_has_no_switch(world):
+    page = new_client(ADMIN).get("/settings").text
+    assert "People can create their own accounts" not in page and "/settings/signup" not in page
+    assert new_client(ADMIN).post("/settings/signup", data={"enabled": "no"}).status_code in (404, 405)
+    assert new_client().post("/signup", data=SIGNUP).status_code == 200 and member("newbie") is not None
+
+
+def test_an_old_signup_off_setting_no_longer_closes_sign_up(world):
+    from clarinet.database import SessionLocal
+    from clarinet.models import Settings
+    with SessionLocal() as db:
+        db.add(Settings(key="signup_enabled", value="false"))
+        db.commit()
+    assert new_client().post("/signup", data=SIGNUP).status_code == 200
 
 
 # ---- administrator access requests

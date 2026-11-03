@@ -160,8 +160,8 @@ def test_priority_page_hides_other_members_requests(world):
 
 def test_audit_log_is_admin_only(world):
     client = login("alice", "pw-alice-1")
-    for path in ("/security", "/security/summary"):
-        r = client.get(path)
-        assert r.status_code in (302, 403)
-        assert AUDIT_NOTE not in r.text
+    r = client.get("/security/summary")
+    assert r.status_code in (302, 403)
+    page = client.get("/security")            # members get their own, smaller Security page
+    assert page.status_code == 200 and AUDIT_NOTE not in page.text
     assert AUDIT_NOTE in login("boss", "pw-boss-1").get("/security").text

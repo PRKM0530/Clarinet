@@ -67,7 +67,11 @@ class SpeedReport:
 def build_speed_report(db: Session, days: int = 30, now: datetime | None = None) -> SpeedReport:
     now = now or datetime.now(timezone.utc)
     start = now - timedelta(days=days)
-    threshold = int(get_setting(db, "speed_report_threshold_pct", str(DEFAULT_THRESHOLD_PCT)) or DEFAULT_THRESHOLD_PCT)
+    # the same "too slow" setting the speed test and the slowdown diagnosis use
+    try:
+        threshold = round(min(1.0, max(0.1, float(get_setting(db, "slowdown_speed_threshold", "0.8")))) * 100)
+    except (TypeError, ValueError):
+        threshold = DEFAULT_THRESHOLD_PCT
 
     report = SpeedReport(
         days=days, start=start, end=now,

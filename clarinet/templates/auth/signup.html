@@ -4,7 +4,6 @@
 <div class="auth-card">
   <div class="auth-logo">Clarinet</div>
   <div class="auth-title">Create your account</div>
-  {% if enabled %}
   <div class="auth-sub">Make an account to see your own devices and usage.</div>
   {% if error %}<div class="flash-bar error" style="margin:0 0 16px" role="alert">{{ error }}</div>{% endif %}
   <form method="post" action="/signup">
@@ -28,9 +27,6 @@
     </div>
     <button type="submit" class="btn btn-primary btn-lg" style="width:100%">Create account</button>
   </form>
-  {% else %}
-  <div class="auth-sub">{{ error or 'Sign-up is turned off on this network. Ask an administrator for an account.' }}</div>
-  {% endif %}
   <p style="text-align:center;margin-top:16px;font-size:13px">Already have an account? <a href="/login">Sign in</a></p>
 </div>
 {% endblock %}

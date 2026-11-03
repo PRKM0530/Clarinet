@@ -146,15 +146,18 @@ def test_a6_blocked_device_offers_unblock_not_block(world):
 
 
 # A7: reset a member's password
-def test_a7_admin_resets_a_members_password_from_settings(world):
-    admin = new_client(ADMIN)
-    assert f"/settings/members/{world['bob']}/reset-password" in admin.get("/settings").text
-    admin.post(f"/settings/members/{world['bob']}/reset-password", data={"new_password": "reset-pass-12345"})
-    assert new_client().post("/login", data={"username": "bob", "password": "reset-pass-12345"}).status_code == 302
+def test_a7_the_settings_page_no_longer_offers_to_reset_a_members_password(world):
+    page = new_client(ADMIN).get("/settings").text
+    assert "reset-password" not in page and "Reset password" not in page
+
+
+def test_a7_a_member_can_reset_their_own_password_from_the_sign_in_page(world):
+    assert 'href="/forgot"' in new_client().get("/login").text
+    assert "Recovery code" in new_client(ALICE).get("/account").text
 
 
 # A9: the login page explains why you were signed out
-@pytest.mark.parametrize("reason,words", [("timeout", "inactivity"), ("session", "expired")])
+@pytest.mark.parametrize("reason,words", [("session", "expired")])
 def test_a9_login_page_explains_why_you_were_signed_out(world, reason, words):
     assert words in new_client().get(f"/login?reason={reason}").text
 

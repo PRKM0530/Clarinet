@@ -2,7 +2,9 @@
 {% import "_modes.html" as modes %}
 {% block title %}Guest Vouchers{% endblock %}
 {% block page_title %}Guest Vouchers{% endblock %}
+{% from "_ui.html" import os_banner %}
 {% block content %}
+{% if enforcing and not can_control %}{{ os_banner("Guest vouchers") }}{% endif %}
 {% if not quarantine %}
 {{ modes.needs_full('Guest vouchers', user, net_mode) }}
 {% else %}

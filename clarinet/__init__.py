@@ -12,6 +12,7 @@ Registers:
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from clarinet.auth import hash_password
 APP_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
+STARTED_AT = time.time()          # for the uptime on the System status page
 
 
 # Jinja2 templates (module-level so routers can import it)
@@ -42,11 +44,15 @@ def _page_context(request):
     except Exception:
         pass
     problem = None
-    if mode in ("FULL", "PUBLIC"):
+    if mode == "FULL":
         from clarinet.core_svc.enforcement_status import problem as _problem
         problem = _problem()
-    return {"net_mode": mode, "enforcing": mode == "FULL", "quarantine": mode in ("FULL", "PUBLIC"),
-            "enforce_problem": problem}
+    import platform
+    from clarinet.core_svc import netinfo
+    return {"net_mode": mode, "enforcing": mode == "FULL", "quarantine": mode == "FULL",
+            "enforce_problem": problem,
+            "linux_ok": platform.system() == "Linux",                 # features that need Linux
+            "can_control": netinfo.can_control_cached()}              # Linux, administrator rights and nftables
 
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
@@ -66,6 +72,9 @@ def _size(num_bytes) -> str:
 
 
 templates.env.filters["size"] = _size
+from clarinet.core_svc.device_names import device_mono as _device_mono, device_name as _device_name  # noqa: E402
+templates.env.filters["device_name"] = _device_name
+templates.env.filters["device_mono"] = _device_mono
 
 
 # Default settings seeded on first run
@@ -143,7 +152,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
     session_cookie="clarinet_session",
-    max_age=settings.SESSION_IDLE_MINUTES * 60,
+    max_age=30 * 24 * 3600,               # the browser keeps the sign-in; it ends at sign-out
     https_only=settings.COOKIE_SECURE,   # true when served over HTTPS (the install script's service sets it)
     same_site="lax",
 )

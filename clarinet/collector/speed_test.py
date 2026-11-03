@@ -9,7 +9,7 @@ Fixes (F-08):
 - below_plan threshold: 80% (SRS default), not 70%
 - Alert only when consistently below plan (≥ 3 in last 5 tests), not on one test
 - Info alert "speed test finished" always raised
-- Respects network_mode (skipped in PUBLIC, note in MONITOR)
+- Runs in every mode
 """
 from __future__ import annotations
 
@@ -28,6 +28,15 @@ _is_running = False
 
 # Plan threshold: below 80% of plan = below_plan
 PLAN_THRESHOLD = 0.80
+def _too_slow_share(db) -> float:
+    """The one "too slow" setting (a fraction of the plan, set in Settings > Advanced)."""
+    from clarinet.app_settings import get_setting
+    try:
+        return min(1.0, max(0.1, float(get_setting(db, "slowdown_speed_threshold", str(PLAN_THRESHOLD)))))
+    except (TypeError, ValueError):
+        return PLAN_THRESHOLD
+
+
 # Alert if ≥ this many of the last N tests are below plan
 BELOW_PLAN_COUNT = 3
 BELOW_PLAN_WINDOW = 5
@@ -168,11 +177,6 @@ def _do_run() -> None:
     from clarinet.app_settings import get_setting
 
     with SessionLocal() as db:
-        mode = get_setting(db, "network_mode", "MONITOR").upper()
-        if mode == "PUBLIC":
-            log.info("Speed test skipped: PUBLIC mode")
-            return
-
         plan_dl = float(get_setting(db, "plan_download_mbps", "0") or 0)
         plan_ul = float(get_setting(db, "plan_upload_mbps", "0") or 0)
         busy = _is_busy(db)
@@ -201,9 +205,10 @@ def _do_run() -> None:
         # Determine below_plan
         below = False
         if plan_dl > 0 and plan_ul > 0:
+            threshold = _too_slow_share(db)
             below = (
-                raw["download_mbps"] < plan_dl * PLAN_THRESHOLD
-                or raw["upload_mbps"] < plan_ul * PLAN_THRESHOLD
+                raw["download_mbps"] < plan_dl * threshold
+                or raw["upload_mbps"] < plan_ul * threshold
             )
 
         record = SpeedTestResult(

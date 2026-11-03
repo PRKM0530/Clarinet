@@ -88,45 +88,16 @@ def test_s05_something_in_the_app_updates_bytes_used():
     assert writers, "no code ever updates EnforcementStatus.bytes_used, so data caps cannot trigger"
 
 
-# S-14: background polling must not keep an idle session alive
-def test_s14_polling_does_not_extend_the_session(world, monkeypatch):
-    from clarinet import auth
-    from clarinet.config import settings
-    clock = {"t": 1_000_000.0}
-    monkeypatch.setattr(auth, "time", SimpleNamespace(time=lambda: clock["t"]))
-    monkeypatch.setattr(settings, "SESSION_IDLE_MINUTES", 1)
-    c = new_client(ALICE)
-    clock["t"] += 50
-    # what the open tab does every 60 s (the page's JavaScript marks it as a background poll)
-    assert c.get("/api/status/topbar", headers={"X-Clarinet-Poll": "1"}).status_code == 200
-    clock["t"] += 50                                                # 100 s after login, user did nothing
-    r = c.get("/dashboard")
-    assert r.status_code == 302 and "reason=timeout" in r.headers["location"]
-
-
-def test_s14_real_activity_does_keep_the_session_alive(world, monkeypatch):
-    from clarinet import auth
-    from clarinet.config import settings
-    clock = {"t": 1_000_000.0}
-    monkeypatch.setattr(auth, "time", SimpleNamespace(time=lambda: clock["t"]))
-    monkeypatch.setattr(settings, "SESSION_IDLE_MINUTES", 1)
-    c = new_client(ALICE)
-    clock["t"] += 50
-    assert c.get("/devices").status_code == 200                     # the user clicks something
-    clock["t"] += 50
-    assert c.get("/dashboard").status_code == 200                   # 100 s after login but only 50 s idle
-
-
-def test_s14_a_truly_idle_session_does_time_out(world, monkeypatch):
-    from clarinet import auth
-    from clarinet.config import settings
-    clock = {"t": 1_000_000.0}
-    monkeypatch.setattr(auth, "time", SimpleNamespace(time=lambda: clock["t"]))
-    monkeypatch.setattr(settings, "SESSION_IDLE_MINUTES", 1)
-    c = new_client(ALICE)
-    clock["t"] += 100
-    r = c.get("/dashboard")
-    assert r.status_code == 302 and "/login" in r.headers["location"]
+# S-14: there is no idle timeout; a sign-in lasts until the person signs out
+def test_s14_a_sign_in_lasts_until_sign_out(world):
+    from clarinet import app
+    from fastapi.testclient import TestClient
+    c = TestClient(app, follow_redirects=False)
+    r = c.post("/login", data={"username": ALICE[0], "password": ALICE[1]})
+    assert "Max-Age=2592000" in r.headers["set-cookie"]            # the browser keeps it for 30 days
+    assert c.get("/dashboard").status_code == 200
+    assert c.post("/logout").status_code == 302
+    assert c.get("/dashboard").status_code == 302
 
 
 # S-23: contract paths documented in the team brief

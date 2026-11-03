@@ -1,0 +1,52 @@
+{# The two modes, described once so the setup page and Settings say the same thing. #}
+{% set MODES = [
+  {
+    'key': 'MONITOR',
+    'title': 'Monitor only',
+    'summary': 'Clarinet looks and reports. It never blocks or slows anything.',
+    'gets': 'The list of devices, internet speed tests, slowdown alerts with the likely cause, and security warnings.',
+    'lacks': 'Blocking, speed limits, time rules, guest vouchers, priority requests and exact data use per device.',
+    'needs': 'Nothing special. It works on any computer.',
+    'pick': 'You are trying Clarinet, or it runs on a normal PC or laptop. Safe to start with.',
+  },
+  {
+    'key': 'FULL',
+    'title': 'Full Control',
+    'summary': 'Everything in Monitor only, and Clarinet can also change the network.',
+    'gets': 'Block or allow devices, speed limits, time rules such as no internet after 10 pm, priority requests, guest vouchers, and exact data use per device.',
+    'lacks': '',
+    'needs': 'A Linux computer run as administrator, which the internet traffic passes through, such as your router, a mini PC or a Raspberry Pi.',
+    'pick': 'You want to decide who is online and how fast.',
+  },
+] %}
+
+{% macro mode_picker(selected, can_control, hold=False) %}
+<div class="mode-grid">
+  {% for m in MODES %}
+  <div class="mode-card">
+    <label class="mode-pick">
+      <input type="radio" name="network_mode" value="{{ m.key }}" {{ 'checked' if selected == m.key else '' }} />
+      <span class="mode-label">{{ m.title }}</span>
+      <span class="mode-desc">{{ m.summary }}</span>
+    </label>
+    <dl class="mode-points">
+      <dt>You get</dt><dd>{{ m.gets }}</dd>
+      {% if m.lacks %}<dt>Not included</dt><dd>{{ m.lacks }}</dd>{% endif %}
+      <dt>Needs</dt><dd>{{ m.needs }}</dd>
+      <dt>Pick it if</dt><dd>{{ m.pick }}</dd>
+    </dl>
+    {% if m.key == 'FULL' %}
+    <label class="mode-option">
+      <input type="hidden" name="hold_new_devices" value="false" />
+      <input type="checkbox" name="hold_new_devices" value="true" {{ 'checked' if hold else '' }} />
+      <span>Keep new devices offline until I approve them. Good for a guest or shared network. Visitors can still get in with a voucher.</span>
+    </label>
+    {% if not can_control %}
+    <div class="mode-warning">This computer cannot do this yet (it needs Linux and administrator rights). You can still choose it, but Clarinet will show a warning and will not change your network.</div>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<p class="form-hint">You can change this later in Settings.</p>
+{% endmacro %}

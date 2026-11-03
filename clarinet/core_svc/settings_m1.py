@@ -13,7 +13,7 @@ Setting keys owned by M1:
   router_ip       — detected/configured gateway IP
   setup_complete  — bool flag (string "true"/"false")
   setup_completed_at — ISO datetime string
-  network_mode    — FULL | MONITOR | PUBLIC
+  network_mode    — FULL | MONITOR
   plan_download_mbps / plan_upload_mbps / billing_day — ISP plan
 
 These are read-only getters; writes go through app_settings._set().
@@ -71,11 +71,13 @@ def scan_interval_seconds(db: Session) -> int:
 
 
 def scan_interface(db: Session) -> str:
-    return _get(db, "network_interface", "")
+    from clarinet.core_svc.autoconfig import resolve
+    return resolve("network_interface", _get(db, "network_interface", ""), "") or ""
 
 
 def scan_router_ip(db: Session) -> str:
-    return _get(db, "router_ip", "")
+    from clarinet.core_svc.autoconfig import resolve
+    return resolve("router_ip", _get(db, "router_ip", ""), "") or ""
 
 
 def scan_subnet(db: Session) -> str:

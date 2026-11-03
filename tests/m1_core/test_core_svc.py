@@ -97,7 +97,8 @@ def test_can_enforce_full_only():
     from clarinet.core_svc.mode import parse_mode, can_enforce
     assert can_enforce(parse_mode("FULL")) is True
     assert can_enforce(parse_mode("MONITOR")) is False
-    assert can_enforce(parse_mode("PUBLIC")) is False
+    # the old guest-network value is read as Full Control (with new devices held back)
+    assert can_enforce(parse_mode("PUBLIC")) is True
 
 
 # ─── oui ────────────────────────────────────────────────────────────────────

@@ -26,15 +26,16 @@ It is a single Python application (FastAPI + SQLite) with a built-in scheduler. 
 
 **People**
 - **Administrators** manage everything. **Members** sign themselves up, claim their own devices ("This is my device", confirmed by an administrator) and see only their own devices, usage and alerts, plus the internet speed and slowdown pages. Someone who asks for administrator access waits for an existing administrator to approve it.
-- Sign-in with lockout after repeated wrong passwords, sessions that end when idle, sign-out everywhere on password reset, an audit log of administrative actions, and a privacy page that says exactly what is collected. A **Purge** button deletes all stored network data.
+- Sign-in with lockout after repeated wrong passwords, sign-ins that last until you sign out, sign-out everywhere on password reset, an audit log of administrative actions, and a privacy page that says exactly what is collected. A **Purge** button deletes all stored network data.
 
-### Three modes
+### Two modes
 
 | Mode | What it does | Where to use it |
 |---|---|---|
-| **Monitor** | Watches only. Devices, latency, speed tests, security checks. Never changes the network. | Any machine, including a laptop on your Wi-Fi |
+| **Monitor only** | Watches only. Devices, latency, speed tests, security checks. Never changes the network. | Any machine, including a laptop on your Wi-Fi |
 | **Full Control** | Everything above, plus usage counting, blocking, speed limits, vouchers and time rules. | A machine that routes the traffic (Linux, root) |
-| **Public** | For a shared or guest network: devices nobody has approved are held back until they use a voucher or an administrator approves them. | A Linux router serving guests |
+
+Full Control has one extra choice, **Keep new devices offline until I approve them**. It suits a guest or shared network: a device nobody has approved gets no internet until an administrator approves it or the person enters a voucher code. It is off by default. (Older installs that were set to the former "Public" mode are read as Full Control with this switch on.)
 
 Features a role or mode cannot use are hidden rather than greyed out, and the pages explain why when it matters. Usage numbers and blocking need Full Control on the machine that carries the traffic; on a laptop you still get devices, latency, speed and security.
 
@@ -42,7 +43,7 @@ Features a role or mode cannot use are hidden rather than greyed out, and the pa
 
 - Python **3.12** (3.13 and later are not supported by the pinned libraries).
 - Linux for the network features. The app starts on macOS and Windows for development, but discovery, counting and enforcement are Linux only.
-- For Full Control and Public mode: root, `nftables` and `iproute2` (`tc`). The app shows a warning on every page if they are missing.
+- For Full Control: root, `nftables` and `iproute2` (`tc`). The app shows a warning on every page if they are missing.
 - Optional: `nmap` and `iperf3` are only used by the test lab.
 
 ## Quick start (development)
@@ -60,7 +61,7 @@ python -c "import secrets; print(secrets.token_hex(32))"     # paste as SECRET_K
 python run.py
 ```
 
-Open **http://127.0.0.1:8000**. The first visit shows the setup wizard: choose an administrator name and password (at least 8 characters), a mode, your network interface, router address and time zone, and your internet plan speeds. Then sign in.
+Open **http://127.0.0.1:8000**. The first visit shows the setup wizard: choose an administrator name and password (at least 8 characters), a mode, and your internet plan speeds and time zone. Clarinet finds your network connection and router by itself; both can be changed under Settings, then Advanced. Every password box has a show and hide button. Then sign in.
 
 After about 15 seconds the Devices page lists what the machine can see. A speed test runs at start-up.
 
@@ -100,15 +101,14 @@ Settings come from `.env` (see `.env.example`) or environment variables. Most ca
 | `APP_ENV` | `development` | `production` hides the API docs and enforces the key check |
 | `APP_HOST`, `APP_PORT` | `127.0.0.1`, `8000` | Where the web server listens |
 | `DATABASE_URL` | `sqlite:///./clarinet.db` | SQLite file |
-| `NETWORK_INTERFACE` | `eth0` | The interface connected to your router (or LAN) |
-| `NETWORK_MODE` | `MONITOR` | `MONITOR`, `FULL` or `PUBLIC` |
+| `NETWORK_INTERFACE` | *(automatic)* | Leave unset. Clarinet finds the connection to your router; set it only to force another one |
+| `NETWORK_MODE` | `MONITOR` | `MONITOR` or `FULL` |
 | `ACTIVE_DISCOVERY` | `auto` | Active ARP scan on top of the passive neighbour table: `auto` (Full Control only), `on`, `off`. Needs root and scapy |
 | `PLAN_DOWNLOAD_MBPS`, `PLAN_UPLOAD_MBPS` | `100`, `20` | Your internet plan |
 | `BILLING_DAY` | `1` | Day the monthly usage resets |
 | `SLOWDOWN_LATENCY_MULTIPLIER` | `3.0` | Latency this many times normal counts as slow |
 | `SLOWDOWN_SPEED_THRESHOLD` | `0.70` | A speed test below this share of the plan counts as slow |
 | `ALERT_LOCKOUT_ATTEMPTS`, `ALERT_LOCKOUT_MINUTES` | `5`, `5` | Sign-in lockout |
-| `SESSION_IDLE_MINUTES` | `30` | Idle time before sign-in is needed again |
 | `TRUSTED_PROXIES` | `127.0.0.1,::1` | Reverse proxies whose `X-Forwarded-For` may be believed |
 | `COOKIE_SECURE` | `false` | Send the cookie over HTTPS only (set `true` behind HTTPS) |
 

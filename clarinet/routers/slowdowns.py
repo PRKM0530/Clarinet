@@ -92,13 +92,6 @@ def slowdowns_page(request: Request, db: Session = Depends(get_db)):
             "duration_min": duration_min,
         })
 
-    # Advanced settings values
-    latency_mult = get_setting(db, "slowdown_latency_multiplier", "2.0")
-    speed_thresh = get_setting(db, "slowdown_speed_threshold", "0.50")
-    perf_wifi_iface = get_setting(db, "perf.wifi_iface", "")
-    sec_monitor_iface = get_setting(db, "sec.monitor_iface", "")
-    wifi_iface_effective = sec_monitor_iface or perf_wifi_iface
-
     try:
         from clarinet.analytics.baseline import is_baseline_ready
         baseline_ready = bool(is_baseline_ready(db))
@@ -116,33 +109,8 @@ def slowdowns_page(request: Request, db: Session = Depends(get_db)):
         "diagnosis_method": "Rule-based",
         "error": request.query_params.get("error"),
         "info": request.query_params.get("info"),
-        # Advanced settings
-        "latency_mult": latency_mult,
-        "speed_thresh": speed_thresh,
-        "wifi_iface": wifi_iface_effective,
     })
 
-
-@router.post("/settings")
-def save_settings(
-    request: Request,
-    latency_multiplier: float = Form(2.0),
-    speed_threshold: float = Form(0.50),
-    wifi_iface: str = Form(""),
-    db: Session = Depends(get_db),
-):
-    """Admin can tune slowdown thresholds from the Slowdowns page (shared §A.4)."""
-    result = require_admin(request, db)
-    if isinstance(result, RedirectResponse):
-        return result
-
-    from clarinet.app_settings import set_setting
-    set_setting(db, "slowdown_latency_multiplier", str(max(1.0, min(latency_multiplier, 10.0))))
-    set_setting(db, "slowdown_speed_threshold", str(max(0.1, min(speed_threshold, 1.0))))
-    if wifi_iface:
-        set_setting(db, "perf.wifi_iface", wifi_iface.strip())
-
-    return RedirectResponse(url="/slowdowns?info=Settings+saved", status_code=302)
 
 
 # ──────────────────────────────────────────────

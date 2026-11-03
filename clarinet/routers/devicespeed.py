@@ -1,0 +1,96 @@
+"""
+clarinet/routers/devicespeed.py
+Per-device speed test. The device measures itself in its own browser:
+
+  GET  /speed/device/probe/ping   nothing to download, to time the round trip
+  GET  /speed/device/probe/down   a block of bytes to download
+  POST /speed/device/probe/up     a block of bytes to upload (discarded)
+  POST /speed/device/result       the numbers the browser measured, stored for the device it came from
+
+The device is recognised by the address the request comes from, the same way
+"This is my device" works. A member can only test (and so only store results for)
+a device they own. An administrator can test the device they are using.
+"""
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from sqlalchemy.orm import Session
+
+from clarinet.auth import client_ip, get_session_user
+from clarinet.core_svc import device_speed
+from clarinet.core_svc.accounts import detect_device
+from clarinet.database import get_db
+
+router = APIRouter(prefix="/speed/device", tags=["device-speed"])
+
+MAX_PROBE_BYTES = 8 * 1024 * 1024
+CHUNK = 64 * 1024
+NO_STORE = {"Cache-Control": "no-store, no-transform", "Content-Encoding": "identity"}
+
+
+def _unauthorised():
+    return JSONResponse({"error": "Sign in first."}, status_code=401)
+
+
+@router.get("/probe/ping")
+def probe_ping(request: Request, db: Session = Depends(get_db)):
+    if get_session_user(request, db) is None:
+        return _unauthorised()
+    return Response(status_code=204, headers=NO_STORE)
+
+
+@router.get("/probe/down")
+def probe_down(request: Request, bytes: int = 1_000_000, db: Session = Depends(get_db)):
+    if get_session_user(request, db) is None:
+        return _unauthorised()
+    size = max(1, min(int(bytes), MAX_PROBE_BYTES))
+
+    def blocks():
+        left, block = size, b"\0" * CHUNK
+        while left > 0:
+            part = block if left >= CHUNK else block[:left]
+            left -= len(part)
+            yield part
+
+    return StreamingResponse(blocks(), media_type="application/octet-stream",
+                             headers={**NO_STORE, "Content-Length": str(size)})
+
+
+@router.post("/probe/up")
+async def probe_up(request: Request, db: Session = Depends(get_db)):
+    if get_session_user(request, db) is None:
+        return _unauthorised()
+    received = 0
+    async for part in request.stream():
+        received += len(part)
+        if received > MAX_PROBE_BYTES:
+            return JSONResponse({"error": "That is more than a test needs."}, status_code=413)
+    return JSONResponse({"received": received}, headers=NO_STORE)
+
+
+@router.post("/result")
+async def store_result(request: Request, db: Session = Depends(get_db)):
+    user = get_session_user(request, db)
+    if user is None:
+        return _unauthorised()
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError
+    except ValueError:
+        return JSONResponse({"error": "The measurement was not valid."}, status_code=400)
+
+    device = detect_device(db, client_ip(request))
+    if device is None:
+        return JSONResponse({"error": "Clarinet does not recognise the device you are using yet. "
+                                       "Wait a minute for it to be found, then try again."}, status_code=409)
+    if not user.is_admin and device.owner_member_id != user.member_id:
+        return JSONResponse({"error": "This device is not yours. Claim it on the Devices page first."}, status_code=403)
+    try:
+        row = device_speed.record(db, device, user.member_id, body.get("download_mbps"), body.get("upload_mbps"),
+                                  body.get("latency_ms"), body.get("jitter_ms"))
+    except device_speed.Refused as refused:
+        return JSONResponse({"error": str(refused)}, status_code=422)
+
+    summary = device_speed.summary(db, device)
+    return {"ok": True, "device_id": device.device_id, "result_id": row.result_id,
+            "status": summary.status, "slowdown_pct": summary.slowdown_pct}

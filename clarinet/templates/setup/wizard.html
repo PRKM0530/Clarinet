@@ -1,126 +1,73 @@
 {% extends "base.html" %}
+{% from "_mode_picker.html" import mode_picker %}
 {% block title %}Setup{% endblock %}
+
 {% block content %}
 <div class="auth-card auth-card-wide">
   <div class="auth-logo">Clarinet</div>
   <div class="auth-title">Welcome to Clarinet</div>
-  <div class="auth-sub">Set up your network monitor in under a minute.</div>
+  <div class="auth-sub">Three quick steps, then you can sign in.</div>
 
   {% if error %}
-  <div style="background:var(--red-bg);border:1px solid rgba(239,68,68,.25);border-radius:var(--radius);padding:10px 14px;margin-bottom:20px;font-size:13px;color:#f87171;display:flex;align-items:center;gap:8px;">
-    {{ error }}
-  </div>
+  <div class="flash-bar error" style="margin:0 0 20px" role="alert">{{ error }}</div>
   {% endif %}
 
   <form method="post" action="/setup/admin">
 
-    <!-- Step 1: Admin account -->
-    <div style="margin-bottom:28px">
-      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-        <span style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">1</span>
-        Create admin account
-      </div>
+    <section class="wizard-step">
+      <h3><span class="step-number">1</span> Create the administrator account</h3>
       <div class="form-row">
         <div>
           <label class="form-label" for="f-username-1">Username</label>
-          <input id="f-username-1" type="text" name="username" class="form-input" placeholder="admin" required minlength="3" />
+          <input id="f-username-1" type="text" name="username" class="form-input" value="{{ form.username if form is defined else '' }}" required minlength="3" autocomplete="off" />
         </div>
         <div>
           <label class="form-label" for="f-password-1">Password</label>
-          <input id="f-password-1" type="password" name="password" class="form-input" placeholder="Min. 8 characters" required minlength="8" />
+          <input id="f-password-1" type="password" name="password" class="form-input" placeholder="At least 8 characters" required minlength="8" autocomplete="new-password" />
         </div>
         <div>
-          <label class="form-label" for="f-password_confirm-1">Confirm password</label>
-          <input id="f-password_confirm-1" type="password" name="password_confirm" class="form-input" placeholder="Repeat password" required />
+          <label class="form-label" for="f-password_confirm-1">Repeat the password</label>
+          <input id="f-password_confirm-1" type="password" name="password_confirm" class="form-input" required autocomplete="new-password" />
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Step 2: Network mode -->
-    <div style="margin-bottom:28px">
-      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-        <span style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">2</span>
-        Network mode
-      </div>
-      <div class="mode-grid">
-        <label class="mode-card selected" id="mode-monitor-lbl">
-          <input type="radio" name="network_mode" value="MONITOR" checked
-                 onchange="selectMode('monitor')" />
-          <div class="mode-label">Monitor Only</div>
-          <div class="mode-desc">View stats — no blocking</div>
-        </label>
-        <label class="mode-card" id="mode-full-lbl">
-          <input type="radio" name="network_mode" value="FULL"
-                 onchange="selectMode('full')" />
-          <div class="mode-label">Full Control</div>
-          <div class="mode-desc">Block, shape, vouchers</div>
-        </label>
-        <label class="mode-card" id="mode-public-lbl">
-          <input type="radio" name="network_mode" value="PUBLIC"
-                 onchange="selectMode('public')" />
-          <div class="mode-label">Public Network</div>
-          <div class="mode-desc">Guest-only access</div>
-        </label>
-      </div>
-    </div>
+    <section class="wizard-step">
+      <h3><span class="step-number">2</span> What should Clarinet be allowed to do?</h3>
+      {{ mode_picker((form.network_mode if form is defined else 'MONITOR')|upper, can_control) }}
+    </section>
 
-    <!-- Step 3: Plan -->
-    <div style="margin-bottom:28px">
-      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-        <span style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">3</span>
-        Your network
+    <section class="wizard-step">
+      <h3><span class="step-number">3</span> Your internet</h3>
+      <div class="form-row">
+        <div>
+          <label class="form-label" for="f-plan_download-1">Plan download speed (Mbps)</label>
+          <input id="f-plan_download-1" type="number" name="plan_download" class="form-input" value="{{ form.plan_download if form is defined else 100 }}" min="1" step="0.5" />
+          <div class="form-hint">From your internet bill. Used to tell when you get less than you pay for.</div>
+        </div>
+        <div>
+          <label class="form-label" for="f-plan_upload-1">Plan upload speed (Mbps)</label>
+          <input id="f-plan_upload-1" type="number" name="plan_upload" class="form-input" value="{{ form.plan_upload if form is defined else 20 }}" min="1" step="0.5" />
+        </div>
+        <div>
+          <span class="form-label">Time zone</span>
+          <input type="hidden" id="f-timezone-1" name="timezone" value="{{ form.timezone if form is defined and form.timezone else machine_zone }}" />
+          <div class="static-value" id="timezone-shown">{{ form.timezone if form is defined and form.timezone else machine_zone }}</div>
+          <div class="form-hint">Found automatically. You can change it later in Settings.</div>
+        </div>
       </div>
       <div class="form-row">
         <div>
-          <label class="form-label" for="f-network_interface-1">Network interface</label>
-          {% if interfaces %}
-          <select id="f-network_interface-1" name="network_interface" class="form-select">
-            {% for i in interfaces %}<option value="{{ i }}"{{ ' selected' if (form.network_interface if form is defined else default_interface) == i else '' }}>{{ i }}</option>{% endfor %}
-          </select>
-          {% else %}
-          <input id="f-network_interface-1" type="text" name="network_interface" class="form-input" placeholder="eth0" />
-          {% endif %}
-          <div class="form-hint">The connection to your router. Clarinet watches the devices on it.</div>
+          <label class="form-label" for="f-billing_day-1">Your bill renews on day</label>
+          <input id="f-billing_day-1" type="number" name="billing_day" class="form-input" value="{{ form.billing_day if form is defined else 1 }}" min="1" max="28" />
         </div>
         <div>
-          <label class="form-label" for="f-router_ip-1">Router address (optional)</label>
-          <input id="f-router_ip-1" type="text" name="router_ip" class="form-input" value="{{ form.router_ip if form is defined else default_gateway }}" placeholder="192.168.1.1" />
-          <div class="form-hint">Used to tell a slow router from a slow internet connection.</div>
-        </div>
-        <div>
-          <label class="form-label" for="f-timezone-1">Time zone</label>
-          <select id="f-timezone-1" name="timezone" class="form-select">
-            {% for z in zones %}<option value="{{ z }}"{{ ' selected' if (form.timezone if form is defined else machine_zone) == z else '' }}>{{ z }}</option>{% endfor %}
-          </select>
-          <div class="form-hint">Times on every page, and time rules such as 22:00, use this zone.</div>
-        </div>
-      </div>
-    </div>
-
-    <div style="margin-bottom:28px">
-      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-        <span style="width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">4</span>
-        ISP plan (used for slowdown detection)
-      </div>
-      <div class="form-row">
-        <div>
-          <label class="form-label" for="f-plan_download-1">Download speed (Mbps)</label>
-          <input id="f-plan_download-1" type="number" name="plan_download" class="form-input" value="100" min="1" step="0.5" />
-        </div>
-        <div>
-          <label class="form-label" for="f-plan_upload-1">Upload speed (Mbps)</label>
-          <input id="f-plan_upload-1" type="number" name="plan_upload" class="form-input" value="20" min="1" step="0.5" />
-        </div>
-        <div>
-          <label class="form-label" for="f-billing_day-1">Billing resets on day</label>
-          <input id="f-billing_day-1" type="number" name="billing_day" class="form-input" value="1" min="1" max="28" />
-        </div>
-        <div>
-          <label class="form-label" for="f-monthly_limit_gb-1">Monthly data limit (GB, optional)</label>
+          <label class="form-label" for="f-monthly_limit_gb-1">Monthly data limit in GB (optional)</label>
           <input id="f-monthly_limit_gb-1" type="number" name="monthly_limit_gb" class="form-input" placeholder="no limit" min="1" step="1" />
+          <div class="form-hint">Clarinet warns you at 70%, 90% and 100%.</div>
         </div>
       </div>
-    </div>
+    </section>
 
     <hr class="divider" />
 
@@ -133,7 +80,7 @@
     </div>
 
     <div style="display:flex;justify-content:flex-end">
-      <button type="submit" class="btn btn-primary btn-lg">Finish setup and create account</button>
+      <button type="submit" class="btn btn-primary btn-lg">Finish setup</button>
     </div>
   </form>
 </div>
@@ -141,10 +88,16 @@
 
 {% block scripts %}
 <script>
-function selectMode(mode) {
-  ['monitor','full','public'].forEach(m => {
-    document.getElementById('mode-'+m+'-lbl').classList.toggle('selected', m === mode);
-  });
-}
+// Use the time zone of the browser doing the setup: it is where the person really is,
+// even if the computer running Clarinet is set to UTC.
+(function () {
+  try {
+    var zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone) {
+      document.getElementById('f-timezone-1').value = zone;
+      document.getElementById('timezone-shown').textContent = zone;
+    }
+  } catch (e) { /* keep the zone found on the server */ }
+})();
 </script>
 {% endblock %}

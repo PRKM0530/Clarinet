@@ -1,0 +1,106 @@
+{% extends "base_app.html" %}
+{% from "_ui.html" import device_ref, pill %}
+{% block title %}Security{% endblock %}
+{% block page_title %}Security{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Your security</h2>
+  <p>Your devices, your sign-ins and your account. Settings for the network itself are managed by an administrator.</p>
+</div>
+
+<section class="section">
+  <div class="micro section-label">Your account</div>
+  <div class="card">
+    <table class="cl-table">
+      <tbody>
+        <tr>
+          <td>Password</td>
+          <td class="muted">Change it whenever you like.</td>
+          <td class="num"><a href="/account" class="btn btn-secondary btn-sm">Change password</a></td>
+        </tr>
+        <tr>
+          <td>Recovery code</td>
+          <td class="muted">{% if has_recovery_code %}You have one. It lets you reset a forgotten password.{% else %}You do not have one yet. Without it a forgotten password cannot be reset.{% endif %}</td>
+          <td class="num">{% if has_recovery_code %}{{ pill('Set', 'ok') }}{% else %}<a href="/account" class="btn btn-primary btn-sm">Make one</a>{% endif %}</td>
+        </tr>
+        <tr>
+          <td>Sign-ins</td>
+          <td class="muted">{{ sessions|length }} active{% if sessions|length > 1 %}. End the ones you are not using.{% endif %}</td>
+          <td class="num">
+            {% if sessions|length > 1 %}
+            <form method="post" action="/account/sign-out-others" style="display:inline">
+              <button class="btn btn-secondary btn-sm" type="submit">Sign out other devices</button>
+            </form>
+            {% else %}{{ pill('Only this one', 'ok') }}{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="micro section-label">Your devices</div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="cl-table">
+        <thead><tr><th>Device</th><th>Address</th><th>Status</th><th>Privacy</th><th class="num">Open alerts</th></tr></thead>
+        <tbody>
+          {% for d in devices %}
+          <tr>
+            <td>{{ device_ref(d) }}</td>
+            <td class="mono">{{ d.ip_address or '-' }}</td>
+            <td>{% if d.state == 'BLOCKED' %}{{ pill('Blocked', 'bad') }}{% elif d.state == 'APPROVED' %}{{ pill('Approved', 'ok') }}{% else %}{{ pill(d.state.title(), 'warn') }}{% endif %}</td>
+            <td>{% if d.is_random_mac %}{{ pill('Random address', 'neutral', 'This device changes its hardware address on purpose. That is good for privacy, but Clarinet may list it as a new device each time.') }}{% else %}<span class="muted">Fixed address</span>{% endif %}</td>
+            <td class="num mono">{{ open_by_device.get(d.device_id, 0) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="muted">You have no devices yet. Open <a href="/devices">Devices</a> and choose "This is my device".</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="two-col section">
+  <section>
+    <div class="micro section-label">Alerts about your devices</div>
+    <div class="card">
+      <table class="cl-table">
+        <tbody>
+          {% for a in alerts %}
+          <tr>
+            <td>{{ pill(a.level.title(), 'bad' if a.level == 'CRITICAL' else ('warn' if a.level == 'WARNING' else 'neutral')) }}</td>
+            <td>{{ a.title }}</td>
+            <td class="num muted">{{ a.raised_at|local('%d %b %H:%M') }}</td>
+          </tr>
+          {% else %}
+          <tr><td class="muted">Nothing to report about your devices.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="micro section-label">Recent sign-ins to your account</div>
+    <div class="card">
+      <table class="cl-table">
+        <tbody>
+          {% for s in sign_ins %}
+          <tr>
+            <td>{% if s.success %}{{ pill('Signed in', 'ok') }}{% else %}{{ pill('Wrong password', 'warn') }}{% endif %}</td>
+            <td class="mono">{{ s.ip_address }}</td>
+            <td class="num muted">{{ s.attempted_at|local('%d %b %H:%M') }}</td>
+          </tr>
+          {% else %}
+          <tr><td class="muted">No sign-ins recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if failed_recently %}<p class="card-note">{{ failed_recently }} recent attempt{{ 's' if failed_recently != 1 else '' }} used a wrong password. If that was not you, change your password.</p>{% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

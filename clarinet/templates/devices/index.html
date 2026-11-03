@@ -30,14 +30,14 @@
   <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <div style="flex:1;min-width:220px">
       <strong>Is this device yours?</strong>
-      <div class="muted">You are using <code>{{ claim.device.label or claim.device.hostname or claim.device.mac_address }}</code> ({{ claim.device.ip_address }}).
+      <div class="muted">You are using <code>{{ claim.device|device_name }}</code> ({{ claim.device.ip_address }}).
         {% if not user.is_admin %}An administrator will confirm it.{% endif %}</div>
     </div>
     <form method="post" action="/devices/claim"><button class="btn btn-primary" type="submit">This is my device</button></form>
   </div>
 </div>
 {% elif claim.state == 'pending' %}
-<div class="card" style="margin-bottom:16px"><div class="card-body">Your request for <code>{{ claim.device.label or claim.device.hostname or claim.device.mac_address }}</code> is waiting for an administrator.</div></div>
+<div class="card" style="margin-bottom:16px"><div class="card-body">Your request for <code>{{ claim.device|device_name }}</code> is waiting for an administrator.</div></div>
 {% elif claim.state == 'none' and not user.is_admin and not devices %}
 <div class="card" style="margin-bottom:16px"><div class="card-body">
   <strong>You have no devices yet.</strong>
@@ -52,7 +52,7 @@
     <table class="cl-table"><tbody>
       {% for c, dev, who in claims %}
       <tr>
-        <td><strong>{{ who.username }}</strong> says <code>{{ dev.label or dev.hostname or dev.mac_address }}</code> ({{ dev.ip_address or 'no address' }}) is theirs</td>
+        <td><strong>{{ who.username }}</strong> says <code>{{ dev|device_name }}</code> ({{ dev.ip_address or 'no address' }}) is theirs</td>
         <td style="text-align:right;padding-right:14px">
           <div style="display:flex;gap:6px;justify-content:flex-end">
             <form method="post" action="/devices/claims/{{ c.claim_id }}/approve"><button class="btn btn-success btn-sm">Confirm</button></form>
@@ -88,7 +88,7 @@
             <div style="display:flex;align-items:center;gap:10px">
               <div>
                 <a href="/devices/{{ d.device_id }}" style="font-size:13px;font-weight:600;color:var(--text)">
-                  {{ d.label or d.hostname or '—' }}
+                  {{ d|device_name }}
                 </a>
                 {% if d.is_random_mac %}
                 <span title="Randomised MAC" style="font-size:11px;color:var(--yellow);margin-left:4px">

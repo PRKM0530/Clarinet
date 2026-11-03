@@ -26,12 +26,51 @@ def _back(message: str | None = None) -> RedirectResponse:
     return RedirectResponse(url=f"/security{suffix}", status_code=303)
 
 
+def _member_security(request: Request, db: Session, user):
+    """What a member may see: their own devices, the alerts about them, and their own sign-ins and sessions."""
+    from clarinet.core_svc import recovery
+    from clarinet.core_svc.permissions import member_device_ids, visible_alerts
+    from clarinet.models.reports import LoginAttempt
+    from clarinet.models.sessions import ActiveSession
+
+    ids = member_device_ids(db, user)
+    devices = db.query(Device).filter(Device.device_id.in_(ids)).order_by(Device.last_seen.desc()).all() if ids else []
+    open_by_device = {}
+    for alert in visible_alerts(db, user).filter(Alert.status == "OPEN").all():
+        open_by_device[alert.device_id] = open_by_device.get(alert.device_id, 0) + 1
+
+    sessions = db.query(ActiveSession).filter(ActiveSession.member_id == user.member_id).order_by(ActiveSession.created_at.desc()).all()
+    current_sid = request.session.get("sid")
+    sign_ins = (
+        db.query(LoginAttempt).filter(LoginAttempt.member_id == user.member_id)
+        .order_by(LoginAttempt.attempted_at.desc()).limit(10).all()
+    )
+    return templates.TemplateResponse("security/member.html", {
+        "request": request,
+        "user": user,
+        "page": "security",
+        "devices": devices,
+        "open_by_device": open_by_device,
+        "alerts": visible_alerts(db, user).order_by(Alert.raised_at.desc()).limit(10).all(),
+        "sessions": sessions,
+        "current_sid": current_sid,
+        "sign_ins": sign_ins,
+        "failed_recently": sum(1 for s in sign_ins if not s.success),
+        "has_recovery_code": recovery.has_code(db, user.member_id),
+        "info": request.query_params.get("info", ""),
+        "error": request.query_params.get("error", ""),
+    })
+
+
 @router.get("", response_class=HTMLResponse)
 def security_page(request: Request, db: Session = Depends(get_db)):
-    result = require_admin(request, db)
+    from clarinet.auth import require_login
+    result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
+    if not user.is_admin:
+        return _member_security(request, db, user)
 
     sec_alerts = (
         db.query(Alert)

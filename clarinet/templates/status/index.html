@@ -1,54 +1,80 @@
 {% extends "base_app.html" %}
-{% block title %}System Status — Clarinet{% endblock %}
+{% from "_ui.html" import pill, linux_pill, metric %}
+{% block title %}System status{% endblock %}
+{% block page_title %}System status{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>System Status</h2>
+  <h2>System status</h2>
+  <p>How Clarinet and the computer it runs on are doing. Speed and slowdowns of individual devices are on the Speed and Slowdowns pages.</p>
 </div>
 
-<div class="row">
-  <div class="col">
-    <div class="card">
-      <div class="card-header">Network</div>
-      <div class="card-body">
-        <dl class="row">
-          <dt class="col-sm-4">Mode</dt>
-          <dd class="col-sm-8"><span class="badge {% if mode == 'FULL' %}bg-success{% elif mode == 'MONITOR' %}bg-warning{% else %}bg-secondary{% endif %}">{{ mode_word }}</span></dd>
-          <dt class="col-sm-4">Network</dt>
-          <dd class="col-sm-8">{{ network_word }}</dd>
-          <dt class="col-sm-4">Interface</dt>
-          <dd class="col-sm-8"><code>{{ iface }}</code></dd>
-          <dt class="col-sm-4">Router IP</dt>
-          <dd class="col-sm-8"><code>{{ router_ip }}</code></dd>
-        </dl>
-      </div>
-    </div>
-  </div>
-  <div class="col">
-    <div class="card">
-      <div class="card-header">Devices</div>
-      <div class="card-body">
-        <dl class="row">
-          <dt class="col-sm-6">Total</dt><dd class="col-sm-6">{{ total_devices }}</dd>
-          <dt class="col-sm-6">Approved devices online</dt><dd class="col-sm-6">{{ online_devices }}</dd>
-          <dt class="col-sm-6">Awaiting Approval</dt><dd class="col-sm-6">{{ new_devices }}</dd>
-          <dt class="col-sm-6">Open Alerts</dt><dd class="col-sm-6">{{ open_alerts }}</dd>
-        </dl>
-      </div>
-    </div>
-  </div>
+{% if system.problem and mode == 'FULL' %}
+<div class="caution" role="note"><span class="pill pill-warn">Needs attention</span><span>Full Control cannot change the network: {{ system.problem }}.</span></div>
+{% endif %}
+
+<div class="metric-row section">
+  {{ metric('Running for', human_duration(system.uptime_seconds)) }}
+  {{ metric('Mode', mode_word) }}
+  {{ metric('Devices online', online_devices ~ ' of ' ~ total_devices) }}
+  {{ metric('Open alerts', open_alerts) }}
+  {{ metric('Awaiting approval', new_devices) }}
 </div>
+
+<div class="two-col section">
+  <section>
+    <div class="micro section-label">Connection</div>
+    <div class="card">
+      <table class="cl-table"><tbody>
+        <tr><td>Router</td><td class="mono">{{ router_ip }}</td>
+          <td class="num">{% if system.gateway is none %}{{ pill('Not measured yet') }}{% elif system.gateway.reachable %}{{ pill('Reachable', 'ok') }} <span class="mono muted">{{ '%.0f'|format(system.gateway.avg_ms or 0) }} ms</span>{% else %}{{ pill('Not answering', 'bad') }}{% endif %}</td></tr>
+        <tr><td>Internet</td><td class="muted">Public servers Clarinet checks</td>
+          <td class="num">{% if system.internet is none %}{{ pill('Not measured yet') }}{% elif system.internet.reachable %}{{ pill('Reachable', 'ok') }} <span class="mono muted">{{ '%.0f'|format(system.internet.avg_ms or 0) }} ms</span>{% else %}{{ pill('Not answering', 'bad') }}{% endif %}</td></tr>
+        <tr><td>Network connection</td><td class="mono">{{ iface }}</td><td class="num"><span class="muted">found automatically</span></td></tr>
+        <tr><td>Control of the network</td><td class="muted">Blocking, limits, time rules</td>
+          <td class="num">{% if mode != 'FULL' %}{{ pill('Not requested', 'neutral', 'Clarinet is in Monitor only mode.') }}{% elif system.can_control %}{{ pill('Available', 'ok') }}{% else %}{{ linux_pill() }}{% endif %}</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  <section>
+    <div class="micro section-label">This computer</div>
+    <div class="card">
+      <table class="cl-table"><tbody>
+        <tr><td>System</td><td class="num mono">{{ system.system }}</td></tr>
+        <tr><td>Python</td><td class="num mono">{{ system.python }}</td></tr>
+        <tr><td>Load (1, 5, 15 min)</td><td class="num mono">{% if system.load %}{{ system.load|join(' · ') }}{% else %}<span class="muted">not available on this system</span>{% endif %}</td></tr>
+        <tr><td>Memory in use</td><td class="num mono">{% if system.memory_used_pct is not none %}{{ system.memory_used_pct }}% of {{ system.memory_total_bytes|size }}{% else %}<span class="muted">not available on this system</span>{% endif %}</td></tr>
+        <tr><td>Disk free</td><td class="num mono">{% if system.disk_free_bytes is not none %}{{ system.disk_free_bytes|size }} of {{ system.disk_total_bytes|size }}{% else %}-{% endif %}</td></tr>
+        <tr><td>Database</td><td class="num mono">{{ system.database_bytes|size if system.database_bytes is not none else '-' }}</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="micro section-label">Background collectors</div>
+  <div class="card">
+    <table class="cl-table">
+      <thead><tr><th>Collector</th><th>Last heard from</th><th class="num">Status</th></tr></thead>
+      <tbody>
+        {% for c in system.collectors %}
+        <tr><td>{{ c.name.replace('_', ' ')|capitalize }}</td><td class="muted">{{ c.last_seen|local('%d %b %H:%M:%S') }}</td>
+          <td class="num">{% if c.state == 'ok' %}{{ pill('Running', 'ok') }}{% else %}{{ pill('Silent', 'bad', 'No report for over twice the usual interval.') }}{% endif %}</td></tr>
+        {% else %}
+        <tr><td colspan="3" class="muted">No collector has reported yet. Collectors that watch the network need Linux; on this computer most stay quiet. {% if not linux_ok %}{{ linux_pill() }}{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 
 {% if limit %}
-<div class="card mt-3">
-  <div class="card-header">Data Limit</div>
-  <div class="card-body">
-    <p>Period: {{ limit.period_start }} → {{ limit.period_end }} ({{ limit.days_remaining }} day(s) remaining)</p>
-    <p>Used: {{ limit.gb_used }} GB
-      {% if limit.bytes_limit %} / {{ "%.1f"|format(limit.bytes_limit / 1073741824) }} GB ({{ "%.0f"|format((limit.pct_used or 0)*100) }}%){% endif %}
-    </p>
-    <span class="badge {% if limit.status == 'OVER' %}bg-danger{% elif limit.status == 'WARN' %}bg-warning{% elif limit.status == 'UNDER' %}bg-success{% else %}bg-secondary{% endif %}">{{ limit.status }}</span>
+<section class="section">
+  <div class="micro section-label">Monthly data</div>
+  <div class="card card-body">
+    <p class="mono">{{ limit.period_start }} to {{ limit.period_end }} &middot; {{ limit.days_remaining }} day(s) left</p>
+    <p>Used <strong class="mono">{{ limit.bytes_used|size }}</strong>{% if limit.bytes_limit %} of <span class="mono">{{ limit.bytes_limit|size }}</span> ({{ "%.0f"|format((limit.pct_used or 0)*100) }}%){% endif %}</p>
   </div>
-</div>
+</section>
 {% endif %}
 {% endblock %}
-

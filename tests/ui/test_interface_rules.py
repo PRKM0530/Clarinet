@@ -196,5 +196,7 @@ def test_sizes_are_written_the_same_way_everywhere(value, shown):
 def test_the_mode_is_always_visible_in_the_top_bar(pages):
     """DASH-5: the current mode is shown on every page, filled in by the page script."""
     for key, html in pages.items():
-        if key[0] != "public":
+        if key[0] == "admin":                    # members do not see the mode at all
             assert 'id="mode-label"' in html, key
+        elif key[0] != "public":
+            assert 'id="mode-label"' not in html, key

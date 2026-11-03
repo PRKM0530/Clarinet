@@ -3,7 +3,7 @@ clarinet/auth.py
 Session helpers for HttpOnly signed-cookie sessions.
 
 Policy:
-  - Session expires after 30 minutes of idle (ACC-01)
+  - A sign-in lasts until the person signs out (or an admin ends it); there is no idle timeout
   - Login lockout: 5 failures → locked 5 min (ACC-02)
   - Per-IP lockout: 5 failures from same IP in 5 min → lock (ACC-02b)
   - Every login attempt is written to LoginAttempt table
@@ -14,11 +14,11 @@ Policy:
 M1 OWNS THIS FILE — do not edit in other branches.
 """
 
-import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from clarinet.config import settings
@@ -81,18 +81,9 @@ def get_session_user(request: Request, db: Session) -> "Member | None":
     """
     Return the authenticated Member from the signed session cookie,
     or None if the session is missing, expired, or the user no longer exists.
-    Updates last_activity on every call so the idle clock resets.
     """
     user_id = request.session.get("user_id")
     if not user_id:
-        return None
-
-    # Idle timeout check
-    last_activity = request.session.get("last_activity", 0)
-    idle_limit = settings.SESSION_IDLE_MINUTES * 60
-    if time.time() - last_activity > idle_limit:
-        request.session.clear()
-        request.state.session_timed_out = True
         return None
 
     # The login must still be recorded on the server: logout and password resets delete it.
@@ -108,10 +99,6 @@ def get_session_user(request: Request, db: Session) -> "Member | None":
         request.session.clear()
         return None
 
-    # Bump the idle clock, except for the page's own background status poll: an open tab must not keep an
-    # abandoned session alive forever.
-    if request.headers.get("X-Clarinet-Poll") != "1":
-        request.session["last_activity"] = time.time()
     return user
 
 
@@ -135,7 +122,6 @@ def login_user(request: Request, user: "Member", db: "Session | None" = None) ->
     request.session["user_id"] = user.member_id
     request.session["username"] = user.username
     request.session["role"] = user.role
-    request.session["last_activity"] = time.time()
 
 
 def logout_user(request: Request, db: "Session | None" = None) -> None:
@@ -261,7 +247,8 @@ def attempt_login(
         return None, generic_error  # don't reveal IP lockout to attacker
 
     # ── Look up user ──────────────────────────────────────────────────────────
-    user = db.query(Member).filter(Member.username == username).first()
+    # Same rule as sign-up, which treats Praveen and praveen as one name
+    user = db.query(Member).filter(func.lower(Member.username) == (username or '').strip().lower()).first()
 
     if user is None:
         _write_login_attempt(db, ip, username, False)
@@ -342,8 +329,7 @@ def require_login(request: Request, db: Session) -> "Member | RedirectResponse":
     """
     user = get_session_user(request, db)
     if user is None:
-        reason = "timeout" if getattr(request.state, "session_timed_out", False) else "session"
-        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
+        return RedirectResponse(url="/login?reason=session", status_code=302)
     return user
 
 

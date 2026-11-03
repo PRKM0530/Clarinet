@@ -66,7 +66,7 @@
         <tbody>
           {% for t in report.top_devices %}
           <tr>
-            <td><a href="/usage/device/{{ t.device.device_id }}">{{ t.device.label or t.device.hostname or t.device.mac_address }}</a></td>
+            <td><a href="/usage/device/{{ t.device.device_id }}">{{ t.device|device_name }}</a></td>
             <td class="num">{{ t.bytes|size }}</td>
           </tr>
           {% else %}

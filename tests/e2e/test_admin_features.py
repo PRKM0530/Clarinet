@@ -84,7 +84,7 @@ def test_adm06_valid_settings_are_saved_and_audited():
 
 
 @pytest.mark.parametrize("field,value", [("monthly_limit_gb", "abc"), ("monthly_limit_gb", "-1"),
-                                         ("speed_report_threshold_pct", "5"), ("speed_report_threshold_pct", "x")])
+                                         ("speed_threshold_pct", "5"), ("speed_threshold_pct", "x")])
 def test_adm06_validated_fields_refuse_bad_values(field, value):
     seed_world()
     r = new_client(ADMIN).post("/settings/update", data={field: value})
@@ -155,15 +155,29 @@ def test_adm05_admin_cannot_disable_self_and_can_disable_others():
     assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
 
 
-def test_adm05_reset_password_changes_login_and_clears_lockout(trusted_proxy):
+def test_adm05_a_member_resets_their_own_password_with_the_recovery_code_and_it_clears_lockout(trusted_proxy):
+    from clarinet.core_svc import recovery
+    from clarinet.database import SessionLocal
+    from clarinet.models import Member
     ids = seed_world()
+    with SessionLocal() as db:
+        code = recovery.issue(db, db.get(Member, ids["alice"]))
     for _ in range(5):
         new_client().post("/login", data={"username": ALICE[0], "password": "bad"}, headers={"X-Forwarded-For": "4.4.4.4"})
-    new_client(ADMIN).post(f"/settings/members/{ids['alice']}/reset-password", data={"new_password": "brand-new-pw-1"})
+    r = new_client().post("/forgot", headers={"X-Forwarded-For": "5.5.5.5"}, data={
+        "username": ALICE[0], "recovery_code": code, "new_password": "brand-new-pw-1", "confirm_password": "brand-new-pw-1"})
+    assert r.status_code == 200 and "Your password was changed" in r.text
     ok = new_client().post("/login", data={"username": ALICE[0], "password": "brand-new-pw-1"}, headers={"X-Forwarded-For": "6.6.6.6"})
     old = new_client().post("/login", data={"username": ALICE[0], "password": ALICE[1]}, headers={"X-Forwarded-For": "6.6.6.7"})
     assert ok.status_code == 302 and old.status_code == 401
-    assert "RESET_PASSWORD" in audit_actions()
+    assert "PASSWORD_RESET_WITH_RECOVERY_CODE" in audit_actions()
+
+
+def test_adm05_an_administrator_cannot_set_a_members_password():
+    ids = seed_world()
+    r = new_client(ADMIN).post(f"/settings/members/{ids['alice']}/reset-password", data={"new_password": "brand-new-pw-1"})
+    assert r.status_code in (404, 405)
+    assert new_client().post("/login", data={"username": ALICE[0], "password": ALICE[1]}).status_code == 302
 
 
 # Purge

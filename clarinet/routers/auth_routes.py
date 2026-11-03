@@ -37,14 +37,8 @@ def login_page(request: Request, db: Session = Depends(get_db)):
     flash_msg = ""
     if reason == "session":
         flash_msg = "Your session expired. Please log in again."
-    elif reason == "timeout":
-        flash_msg = "You were logged out after 30 minutes of inactivity."
 
-    from clarinet.routers.signup import signup_enabled
-    return templates.TemplateResponse(
-        "auth/login.html",
-        {"request": request, "flash": flash_msg, "error": error, "signup_enabled": signup_enabled(db)},
-    )
+    return templates.TemplateResponse("auth/login.html", {"request": request, "flash": flash_msg, "error": error})
 
 
 # POST /login

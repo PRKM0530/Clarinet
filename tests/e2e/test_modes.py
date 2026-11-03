@@ -1,6 +1,6 @@
 """
 MOD-01: which state-changing actions each network mode allows.
-FULL may change the network; MONITOR and PUBLIC only observe (PUBLIC also skips speed tests).
+FULL may change the network; MONITOR only observes. Speed tests run in both.
 """
 from __future__ import annotations
 
@@ -16,8 +16,7 @@ def post(mode, path, data=None):
 
 def test_mod01_block_only_works_in_full_mode():
     assert "info=blocked" in post("FULL", "/devices/{d_new}/block")
-    for mode in ("MONITOR", "PUBLIC"):
-        assert "monitor_mode_only" in post(mode, "/devices/{d_new}/block")
+    assert "monitor_mode_only" in post("MONITOR", "/devices/{d_new}/block")
 
 
 def test_mod01_blocked_device_state_is_not_changed_outside_full_mode():
@@ -29,16 +28,15 @@ def test_mod01_blocked_device_state_is_not_changed_outside_full_mode():
         assert db.get(Device, ids["d_new"]).state == "NEW"
 
 
-def test_mod01_speed_test_is_refused_in_public_mode_only():
+def test_mod01_speed_test_runs_in_both_modes():
     assert "info=Speed" in post("FULL", "/speed/run")
     assert "info=Speed" in post("MONITOR", "/speed/run")
-    assert "error=" in post("PUBLIC", "/speed/run")
 
 
 RULE = {"device_id": "{d_alice}", "days": "mon", "start_time": "22:00", "end_time": "23:00", "action": "BLOCK"}
 
 
-@pytest.mark.parametrize("mode", ["MONITOR", "PUBLIC"])
+@pytest.mark.parametrize("mode", ["MONITOR"])
 def test_mod01_time_rules_cannot_be_created_outside_full_mode(mode):
     ids = seed_world(mode)
     r = new_client(ADMIN).post("/rules/create", data={**RULE, "device_id": ids["d_alice"]})

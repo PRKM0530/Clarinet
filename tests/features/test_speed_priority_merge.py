@@ -104,7 +104,7 @@ def test_threshold_follows_the_setting(db):
     from clarinet.core_svc.speed_report import build_speed_report
     add_tests(db, [85, 85, 85, 85])
     assert build_speed_report(db, 30).below_count == 0
-    db.add(Settings(key="speed_report_threshold_pct", value="90"))
+    db.add(Settings(key="slowdown_speed_threshold", value="0.9"))
     db.commit()
     assert build_speed_report(db, 30).below_count == 4
 
@@ -127,15 +127,15 @@ def test_speed_report_page_survives_any_period(db, days):
 
 @pytest.mark.parametrize("bad", ["5", "101", "abc", "-3", "7.5"])
 def test_a_bad_speed_threshold_is_rejected(db, bad):
-    r = admin().post("/settings/update", data={"speed_report_threshold_pct": bad})
-    assert "bad_threshold" in r.headers["location"]
-    assert db.get(Settings, "speed_report_threshold_pct") is None
+    r = admin().post("/settings/update", data={"speed_threshold_pct": bad})
+    assert "bad_speed_percent" in r.headers["location"]
+    assert db.get(Settings, "slowdown_speed_threshold") is None
 
 
 def test_admin_can_change_the_speed_threshold(db):
-    admin().post("/settings/update", data={"speed_report_threshold_pct": "70"})
+    admin().post("/settings/update", data={"speed_threshold_pct": "70"})
     db.expire_all()
-    assert db.get(Settings, "speed_report_threshold_pct").value == "70"
+    assert db.get(Settings, "slowdown_speed_threshold").value == "0.7"
 
 
 # priority rules the admin can change

@@ -180,9 +180,15 @@ def test_x_forwarded_for_is_only_believed_from_a_trusted_proxy(monkeypatch):
 
 
 def test_resetting_a_password_logs_the_member_out_everywhere(world):
+    from clarinet.core_svc import recovery
+    from clarinet.database import SessionLocal
+    from clarinet.models import Member
     alice = new_client(ALICE)
     assert alice.get("/dashboard").status_code == 200
-    new_client(ADMIN).post(f"/settings/members/{world['alice']}/reset-password", data={"new_password": "another-pw-12345"})
+    with SessionLocal() as db:
+        code = recovery.issue(db, db.get(Member, world["alice"]))
+    new_client().post("/forgot", data={"username": ALICE[0], "recovery_code": code,
+                                       "new_password": "another-pw-12345", "confirm_password": "another-pw-12345"})
     assert alice.get("/dashboard").status_code == 302
 
 

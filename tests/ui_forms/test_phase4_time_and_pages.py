@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import sys
+
 import pytest
 
 from tests._support import ADMIN, new_client, seed_world
@@ -64,6 +66,7 @@ def test_speed_page_tells_the_truth_about_a_failed_test():
     assert "did not finish" in page
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="builds a ':' separated PATH, which is a Linux convention")
 def test_speed_tool_is_also_searched_next_to_the_apps_python(monkeypatch):
     from clarinet.collector import speed_test
     monkeypatch.delenv("CLARINET_NO_VENV_TOOLS", raising=False)
@@ -82,10 +85,11 @@ def test_export_links_and_audit_warning_are_on_the_pages():
     assert "only run it on a router you own" in c.get("/security").text.lower()
 
 
-def test_slowdowns_page_explains_learning_and_has_admin_settings():
+def test_slowdowns_page_points_to_settings_instead_of_repeating_them():
     seed_world("MONITOR")
     page = new_client(ADMIN).get("/slowdowns").text
-    assert 'action="/slowdowns/settings"' in page
+    assert 'action="/slowdowns/settings"' not in page
+    assert "Settings, then Advanced" in page
 
 
 def test_reports_open_on_today():
@@ -120,8 +124,17 @@ def _device_states():
         return {d.mac_address.lower(): d.state for d in db.query(Device).all()}
 
 
-def test_public_mode_holds_back_new_devices_but_not_approved_ones(monkeypatch):
-    seed_world("PUBLIC")
+def _hold_new_devices():
+    from clarinet.database import SessionLocal
+    from clarinet.models import Settings
+    with SessionLocal() as db:
+        db.merge(Settings(key="hold_new_devices", value="true"))
+        db.commit()
+
+
+def test_keeping_new_devices_offline_holds_them_back_but_not_approved_ones(monkeypatch):
+    seed_world("FULL")
+    _hold_new_devices()
     calls = _reconcile_with_fake_nft(monkeypatch)
     states = _device_states()
     new = {m for m, st in states.items() if st == "NEW"}
@@ -129,7 +142,7 @@ def test_public_mode_holds_back_new_devices_but_not_approved_ones(monkeypatch):
     assert new and approved
     assert new <= set(calls["deny"])
     assert not (approved & set(calls["deny"]))
-    assert calls["counted"] is None                         # Public mode does no usage counting
+    assert calls["counted"] is not None                     # usage is still counted
 
 
 def test_monitor_mode_never_holds_anything_back(monkeypatch):
@@ -145,9 +158,10 @@ def test_full_mode_still_only_holds_back_guests(monkeypatch):
     assert not ({m for m, st in states.items() if st == "NEW"} & set(calls["deny"]))
 
 
-def test_vouchers_are_offered_in_public_mode(monkeypatch):
+def test_vouchers_are_offered_while_new_devices_are_held(monkeypatch):
     monkeypatch.setattr("clarinet.core_svc.enforcement_status.problem", lambda: None)
-    seed_world("PUBLIC")
+    seed_world("FULL")
+    _hold_new_devices()
     c = new_client(ADMIN)
     assert 'href="/vouchers"' in c.get("/dashboard").text
     assert "needs Full Control mode" not in c.get("/vouchers").text
@@ -160,6 +174,7 @@ def test_login_page_points_visitors_to_the_guest_page():
     assert 'href="/guest"' in page
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="uses os.geteuid, which Windows does not have")
 def test_active_scan_needs_root_scapy_and_the_right_mode(monkeypatch):
     import os
     from clarinet.app_settings import set_setting
@@ -204,7 +219,7 @@ def test_development_only_warns_about_the_example_secret_key():
 def test_installer_creates_a_private_env_file():
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
-    script = (root / "deploy" / "install.sh").read_text()
+    script = (root / "deploy" / "install.sh").read_text(encoding="utf-8")
     assert "secrets.token_hex" in script and "chmod 600" in script and "APP_ENV=production" in script
     assert script.index("Private configuration") < script.index("systemctl start clarinet")   # .env exists before the service starts
 

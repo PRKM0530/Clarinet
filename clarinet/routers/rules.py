@@ -7,7 +7,7 @@ Added/Fixed (M2):
 - Toggle properly lifts nft block when rule is deactivated
 - Time-limited exceptions (RuleException has expires_at)
 - RATE_LIMIT supported in UI
-- Mode gating: rules unavailable in PUBLIC mode; MONITOR shows note
+- Mode gating: MONITOR shows a note, rules only take effect in Full Control
 """
 from __future__ import annotations
 
@@ -59,7 +59,6 @@ def rules_page(request: Request, db: Session = Depends(get_db)):
         "devices": devices,
         "days": DAYS_OF_WEEK,
         "mode": mode,
-        "mode_available": mode != "PUBLIC",
         "error": request.query_params.get("error"),
         "info": request.query_params.get("info"),
     })
@@ -259,7 +258,7 @@ def rules_summary(request: Request, db: Session = Depends(get_db)):
     )
 
     return JSONResponse({
-        "available": mode != "PUBLIC",
+        "available": mode == "FULL",
         "mode": mode,
         "active_rules": active_rules,
         "total_rules": total_rules,

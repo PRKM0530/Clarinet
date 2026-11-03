@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Recovery code{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <div class="auth-logo">Clarinet</div>
+  <div class="auth-title">{{ title }}</div>
+  <p class="auth-sub">{{ intro }}</p>
+
+  <div class="recovery-code" id="recovery-code" aria-label="Your recovery code">{{ code }}</div>
+
+  <p class="muted small">Write it down or keep it somewhere safe. It is shown <strong>only this once</strong>.
+    If you ever forget your password, the <em>Forgot your password?</em> link on the sign-in page uses it to set a new one.
+    Anyone who has this code can reset your password, so keep it private.</p>
+
+  <a href="{{ continue_url }}" class="btn btn-primary btn-lg" style="width:100%">{{ continue_label }}</a>
+</div>
+{% endblock %}
