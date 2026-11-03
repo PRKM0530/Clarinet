@@ -15,7 +15,7 @@ from tests.ui_forms.formtools import parse, target
 ADMIN_PAGES = ["/dashboard", "/devices", "/devices/{d_new}", "/devices/{d_alice}", "/alerts", "/vouchers", "/rules",
                "/priority", "/speed", "/slowdowns", "/security", "/settings", "/usage", "/reports", "/status",
                "/account"]
-MEMBER_PAGES = ["/dashboard", "/devices", "/devices/{d_alice}", "/alerts", "/priority", "/usage", "/reports",
+MEMBER_PAGES = ["/dashboard", "/devices", "/devices/{d_alice}", "/alerts", "/priority", "/usage", "/reports", "/speed", "/slowdowns",
                 "/account"]
 PUBLIC_PAGES = ["/login", "/signup", "/guest", "/privacy"]
 

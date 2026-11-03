@@ -10,11 +10,15 @@
       <p>ISP plan: <strong style="color:var(--text)">{{ plan_download|round(0)|int }} ↓ / {{ plan_upload|round(0)|int }} ↑ Mbps</strong></p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      {% if user.is_admin %}
       <a href="/speed/report" class="btn btn-secondary">Report for your provider</a>
       <a href="/speed/export.csv" class="btn btn-secondary">Export CSV</a>
+      {% if net_mode != 'PUBLIC' %}
       <form method="post" action="/speed/run">
         <button class="btn btn-primary">Run speed test now</button>
       </form>
+      {% endif %}
+      {% endif %}
     </div>
   </div>
 </div>

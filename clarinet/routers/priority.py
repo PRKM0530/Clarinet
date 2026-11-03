@@ -180,7 +180,7 @@ def request_priority(
 
     from clarinet.enforcer.mode import get_mode
     if get_mode(db) != "FULL":
-        return RedirectResponse(url="/priority?error=Priority+requires+Full-Control+mode", status_code=302)
+        return RedirectResponse(url="/priority?error=Priority+needs+Full+Control+mode", status_code=302)
 
     # Validate ownership (F-07a fix)
     device = db.get(Device, device_id)
@@ -224,7 +224,9 @@ def request_priority(
     db.commit()
 
     if decision == "APPROVED":
-        return RedirectResponse(url="/priority?info=Priority+granted+automatically", status_code=302)
+        from clarinet.core_svc.enforcement_status import problem
+        note = "Priority+saved,+but+Clarinet+cannot+change+the+network+right+now+(see+the+red+banner)" if problem() else "Priority+granted+automatically"
+        return RedirectResponse(url=f"/priority?info={note}", status_code=302)
     return RedirectResponse(url=f"/priority?error={policy_reason.replace(' ', '+')}", status_code=302)
 
 

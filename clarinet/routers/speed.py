@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from sqlalchemy.orm import Session
 
 from clarinet import templates
-from clarinet.auth import require_admin
+from clarinet.auth import require_admin, require_login
 from clarinet.database import get_db
 from clarinet.models import SpeedTestResult
 
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/speed", tags=["speed"])
 
 @router.get("", response_class=HTMLResponse)
 def speed_page(request: Request, db: Session = Depends(get_db)):
-    result = require_admin(request, db)
+    result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
@@ -82,7 +82,7 @@ def trigger_speed_test(request: Request, db: Session = Depends(get_db)):
 
     from clarinet.enforcer.mode import get_mode
     if get_mode(db) == "PUBLIC":
-        return RedirectResponse(url="/speed?error=Speed+test+unavailable+in+client+mode", status_code=302)
+        return RedirectResponse(url="/speed?error=Speed+tests+are+turned+off+in+Public+mode", status_code=302)
 
     from clarinet.collector.speed_test import run_speed_test_async, is_running
     if is_running():

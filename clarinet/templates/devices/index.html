@@ -114,12 +114,12 @@
               <button class="btn btn-success btn-sm btn-icon" title="Approve"
                       onclick="openApprove({{ d.device_id }}, '{{ d.mac_address }}', '{{ d.hostname or '' }}')">Approve</button>
               {% endif %}
-              {% if d.state != 'BLOCKED' %}
+              {% if enforcing and d.state != 'BLOCKED' %}
               <form method="post" action="/devices/{{ d.device_id }}/block"
                     onsubmit="return confirm('Block {{ d.mac_address }}?')">
                 <button class="btn btn-danger btn-sm btn-icon" title="Block">Block</button>
               </form>
-              {% else %}
+              {% elif d.state == 'BLOCKED' %}
               <form method="post" action="/devices/{{ d.device_id }}/unblock"
                     onsubmit="return confirm('Let {{ d.mac_address }} back onto the network?')">
                 <button class="btn btn-success btn-sm btn-icon" title="Unblock">Unblock</button>

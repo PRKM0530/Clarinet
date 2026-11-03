@@ -31,7 +31,23 @@ STATIC_DIR = APP_DIR / "static"
 
 
 # Jinja2 templates (module-level so routers can import it)
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+def _page_context(request):
+    """Variables every page can use: the network mode, and whether Full Control can really change the network."""
+    mode = "MONITOR"
+    try:
+        from clarinet.enforcer.mode import get_mode
+        with SessionLocal() as db:
+            mode = get_mode(db)
+    except Exception:
+        pass
+    problem = None
+    if mode == "FULL":
+        from clarinet.core_svc.enforcement_status import problem as _problem
+        problem = _problem()
+    return {"net_mode": mode, "enforcing": mode == "FULL", "enforce_problem": problem}
+
+
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR), context_processors=[_page_context])
 
 
 def _size(num_bytes) -> str:

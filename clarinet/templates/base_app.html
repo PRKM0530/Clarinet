@@ -17,16 +17,22 @@
     {{ nav_link('/dashboard', 'dashboard', 'bi-grid-1x2', 'Dashboard') }}
     {{ nav_link('/usage', 'usage', 'bi-bar-chart-line', 'Usage') }}
     {{ nav_link('/reports', 'reports', 'bi-file-earmark-text', 'Reports') }}
-    {{ nav_link('/priority', 'priority', 'bi-lightning-charge', 'Priority') }}
+    {% if enforcing %}{{ nav_link('/priority', 'priority', 'bi-lightning-charge', 'Priority') }}{% endif %}
     {{ nav_link('/alerts', 'alerts', 'bi-bell', 'Alerts') }}
+    {% if not user.is_admin %}
+    {{ nav_link('/speed', 'speed', 'bi-speedometer2', 'Internet speed') }}
+    {{ nav_link('/slowdowns', 'slowdowns', 'bi-activity', 'Slowdowns') }}
+    {% endif %}
   </div>
 
   {% if user.is_admin %}
   <div class="sidebar-section">
     <div class="sidebar-section-label">Network</div>
     {{ nav_link('/devices', 'devices', 'bi-hdd-network', 'Devices') }}
+    {% if enforcing %}
     {{ nav_link('/rules', 'rules', 'bi-clock', 'Time rules') }}
     {{ nav_link('/vouchers', 'guest', 'bi-ticket-perforated', 'Guest vouchers') }}
+    {% endif %}
   </div>
 
   <div class="sidebar-section">
@@ -92,6 +98,12 @@
   <div class="flash-bar success" role="status">
     <span>{{ msgs.flash_text.get(info, info) }}</span>
     <button class="close-btn" type="button" aria-label="Dismiss" onclick="this.parentElement.remove()">&times;</button>
+  </div>
+  {% endif %}
+
+  {% if enforce_problem and user.is_admin %}
+  <div class="flash-bar error" role="alert" id="enforce-problem">
+    <span><strong>Full Control cannot change the network right now.</strong> {{ enforce_problem|capitalize }}. Blocks, time rules, speed limits and vouchers are saved but have no effect until this is fixed. Start Clarinet as root on the router, or switch to Monitor mode in Settings.</span>
   </div>
   {% endif %}
 

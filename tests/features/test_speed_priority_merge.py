@@ -187,6 +187,8 @@ def test_the_daily_limit_the_admin_sets_is_the_one_that_decides_requests(db):
 
 
 def test_the_priority_page_offers_only_lengths_the_rules_allow(db):
+    db.add(Settings(key="network_mode", value="FULL"))          # priority only exists in Full Control mode
+    db.commit()
     admin().post("/priority/policy", data={"default_duration_min": "15", "max_duration_min": "30", "daily_limit_min": "60"})
     page = admin().get("/priority").text
     assert 'name="default_duration_min"' in page and 'value="60"' in page

@@ -1,7 +1,11 @@
 {% extends "base_app.html" %}
+{% import "_modes.html" as modes %}
 {% block title %}Time Rules{% endblock %}
 {% block page_title %}Time Rules{% endblock %}
 {% block content %}
+{% if not enforcing %}
+{{ modes.needs_full('Time rules', user, net_mode) }}
+{% else %}
 <div class="page-header">
   <div style="display:flex;align-items:center;justify-content:space-between">
     <div>
@@ -133,9 +137,11 @@
     </form>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% if enforcing %}
 <script>
 function openModal(id)  { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -144,4 +150,5 @@ document.getElementById('rule-action').addEventListener('change', function() {
   document.getElementById('rate-field').style.display = this.value === 'RATE_LIMIT' ? '' : 'none';
 });
 </script>
+{% endif %}
 {% endblock %}

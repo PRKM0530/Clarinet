@@ -1,7 +1,11 @@
 {% extends "base_app.html" %}
+{% import "_modes.html" as modes %}
 {% block title %}Priority Access{% endblock %}
 {% block page_title %}Priority Access{% endblock %}
 {% block content %}
+{% if not enforcing %}
+{{ modes.needs_full('Priority requests', user, net_mode) }}
+{% else %}
 <div class="page-header">
   <h2>Priority Access</h2>
   <p>Request or approve temporary bandwidth priority for a device.</p>
@@ -111,5 +115,6 @@
     <button class="btn btn-primary" type="submit">Save rules</button>
   </form>
 </div>
+{% endif %}
 {% endif %}
 {% endblock %}

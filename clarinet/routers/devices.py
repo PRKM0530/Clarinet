@@ -312,6 +312,12 @@ def split_device(
     return RedirectResponse(url=f"/devices/{new_id}?info=split", status_code=302)
 
 
+def _done(code: str) -> str:
+    """The success message for an action that should reach the network: honest when it could not."""
+    from clarinet.core_svc.enforcement_status import problem
+    return f"{code}_pending" if problem() else code
+
+
 def _apply_enforcement(db) -> None:
     """Make the network match the new device state right away (not up to 15 s later). Never breaks the page."""
     try:
@@ -379,7 +385,7 @@ def block_device(device_id: int, request: Request, db: Session = Depends(get_db)
     # Notify M2 (C-08: lazy import)
     _apply_enforcement(db)
 
-    return RedirectResponse(url=f"/devices/{device_id}?info=blocked", status_code=302)
+    return RedirectResponse(url=f"/devices/{device_id}?info={_done('blocked')}", status_code=302)
 
 
 @router.post("/devices/{device_id}/unblock")
@@ -406,7 +412,7 @@ def unblock_device(device_id: int, request: Request, db: Session = Depends(get_d
 
     _apply_enforcement(db)
 
-    return RedirectResponse(url=f"/devices/{device_id}?info=unblocked", status_code=302)
+    return RedirectResponse(url=f"/devices/{device_id}?info={_done('unblocked')}", status_code=302)
 
 
 @router.post("/devices/{device_id}/delete")

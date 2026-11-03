@@ -1,0 +1,15 @@
+{# What to show instead of a feature that needs Full Control mode #}
+{% macro needs_full(feature, user, net_mode) %}
+<div class="card" style="max-width:640px">
+  <div class="card-body">
+    <h3 style="margin-top:0">{{ feature }} needs Full Control mode</h3>
+    <p>Clarinet is in <strong>{{ 'Monitor' if net_mode == 'MONITOR' else 'Public' }}</strong> mode, so it only watches the network and cannot change it.
+       {{ feature }} works by changing what a device is allowed to do, which only Full Control mode can do.</p>
+    {% if user.is_admin %}
+    <p class="muted">Full Control needs Clarinet to run on the router (or a machine the traffic goes through) with permission to change the firewall. You can change the mode in <a href="/settings">Settings</a>.</p>
+    {% else %}
+    <p class="muted">If you need this, ask an administrator.</p>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}

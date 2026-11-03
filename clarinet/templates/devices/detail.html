@@ -133,19 +133,19 @@
 {% endif %}
 
 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
-  {% if user.is_admin and device.state != 'GUEST' %}
+  {% if user.is_admin and enforcing and device.state != 'GUEST' %}
   <form method="post" action="/devices/{{ device.device_id }}/guest"
         onsubmit="return confirm('Treat this device as a guest? It will have internet only.')">
     <button class="btn btn-secondary">Mark as guest</button>
   </form>
   {% endif %}
   {% if user.is_admin %}
-  {% if device.state != 'BLOCKED' %}
+  {% if enforcing and device.state != 'BLOCKED' %}
   <form method="post" action="/devices/{{ device.device_id }}/block"
         onsubmit="return confirm('Block this device?')">
     <button class="btn btn-danger">Block Device</button>
   </form>
-  {% else %}
+  {% elif device.state == 'BLOCKED' %}
   <form method="post" action="/devices/{{ device.device_id }}/unblock"
         onsubmit="return confirm('Let this device back onto the network?')">
     <button class="btn btn-success">Unblock Device</button>
@@ -156,9 +156,11 @@
     <button class="btn btn-success">Approve Device</button>
   </form>
   {% endif %}
+  {% if enforcing %}
   <a href="/rules?device={{ device.device_id }}" class="btn btn-secondary">
     Add Time Rule
   </a>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

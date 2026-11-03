@@ -26,9 +26,27 @@ from clarinet.models import SlowdownEvent
 router = APIRouter(prefix="/slowdowns", tags=["slowdowns"])
 
 
+def _hide_other_devices(db, user, causes):
+    """A member may read why the network was slow, but not which of other people's devices caused it."""
+    from clarinet.core_svc.permissions import member_device_ids
+    from clarinet.models import Device
+    own = {d.mac_address.upper() for d in db.query(Device).filter(Device.device_id.in_(member_device_ids(db, user)))}
+    safe = []
+    for c in causes:
+        c = dict(c)
+        if c.get("cause") == "ONE_DEVICE_HEAVY" and (c.get("device_mac") or "").upper() not in own:
+            c["evidence"] = "One device on the network was using most of the bandwidth."
+            c["suggestion"] = "Ask whoever uses the busiest device to pause large downloads."
+            c.pop("device_mac", None)
+        elif c.get("cause") == "COLLECTIVE_CONGESTION":
+            c["evidence"] = "Several devices were using most of the bandwidth together."
+        safe.append(c)
+    return safe
+
+
 @router.get("", response_class=HTMLResponse)
 def slowdowns_page(request: Request, db: Session = Depends(get_db)):
-    result = require_admin(request, db)
+    result = require_login(request, db)
     if isinstance(result, RedirectResponse):
         return result
     user = result
@@ -64,6 +82,9 @@ def slowdowns_page(request: Request, db: Session = Depends(get_db)):
             started = e.started_at if e.started_at.tzinfo else e.started_at.replace(tzinfo=timezone.utc)
             duration_min = int((ended - started).total_seconds() // 60)
 
+        if not user.is_admin:
+            causes = _hide_other_devices(db, user, causes)
+            raw = {}                                         # technical measurements are for administrators
         parsed_events.append({
             "event": e,
             "causes": causes,
