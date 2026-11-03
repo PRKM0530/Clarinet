@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # Network
     NETWORK_INTERFACE: str = "eth0"
     NETWORK_MODE: str = "MONITOR"
+    # Active ARP scan on top of the neighbour table: auto (Full Control only) | on | off
+    ACTIVE_DISCOVERY: str = "auto"
 
     # ISP plan
     PLAN_DOWNLOAD_MBPS: float = 100.0

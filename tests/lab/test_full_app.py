@@ -54,7 +54,8 @@ class RunningApp:
         env = {"PATH": f"{self.dir/'bin'}:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": str(self.dir / "home"),
                "PYTHONDONTWRITEBYTECODE": "1", "SECRET_KEY": "lab-fixed-secret-for-restart-test",
                "DATABASE_URL": f"sqlite:///{self.db}", "APP_ENV": "production", "APP_PORT": str(PORT),
-               "NETWORK_INTERFACE": IFACE, "NETWORK_MODE": "FULL"}
+               "NETWORK_INTERFACE": IFACE, "NETWORK_MODE": "FULL",
+               "ACTIVE_DISCOVERY": "off"}      # these tests expect devices to appear only when they send traffic
         self.logfile = open(self.log, "ab")
         self.proc = subprocess.Popen([sys.executable, str(REPO / "tests/lab/app_main.py")], cwd=REPO, env=env,
                                      stdout=self.logfile, stderr=self.logfile)

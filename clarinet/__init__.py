@@ -72,6 +72,7 @@ templates.env.filters["size"] = _size
 DEFAULT_SETTINGS = {
     "network_mode": settings.NETWORK_MODE,
     "network_interface": settings.NETWORK_INTERFACE,
+    "active_discovery": settings.ACTIVE_DISCOVERY.lower() if settings.ACTIVE_DISCOVERY.lower() in ("auto", "on", "off") else "auto",
     "plan_download_mbps": str(settings.PLAN_DOWNLOAD_MBPS),
     "plan_upload_mbps": str(settings.PLAN_UPLOAD_MBPS),
     "billing_day": str(settings.BILLING_DAY),
