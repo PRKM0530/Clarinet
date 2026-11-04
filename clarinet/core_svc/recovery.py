@@ -107,8 +107,6 @@ def reset_password(db: Session, ip: str, username: str, code: str, new_password:
         return None, None, (WRONG, 422)
 
     member.password_hash = hash_password(new_password)
-    member.failed_attempts = 0
-    member.locked_until = None
     db.commit()
     end_sessions(db, member.member_id)               # whoever else was signed in is signed out
     fresh = issue(db, member)

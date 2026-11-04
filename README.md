@@ -28,7 +28,7 @@ It is a single Python application (FastAPI + SQLite) with a built-in scheduler. 
 **People**
 - **Administrators** manage everything except other members' speed results. **Members** sign themselves up, claim their own devices ("This is my device", confirmed by an administrator) and see only their own devices, usage and alerts. Someone who asks for administrator access waits for an existing administrator to approve it.
 - A member who forgets their password resets it on the sign-in page with a **recovery code** they made on My account. No one else, an administrator included, can reset it for them.
-- Sign-in with lockout after repeated wrong passwords, sign-ins that last until you sign out, an audit log of administrative actions, and a privacy page that says what is collected. A **Purge** button deletes all stored network data.
+- Sign-ins that last until you sign out, an audit log of administrative actions, and a privacy page that says what is collected. A **Purge** button deletes all stored network data.
 
 ### Two modes
 
@@ -65,7 +65,7 @@ python run.py
 
 Open **http://127.0.0.1:8000**. The first visit shows the setup wizard: choose an administrator name and password (at least 8 characters), a mode, and your internet plan speeds. The time zone comes from your browser, and Clarinet finds your network connection and router by itself (both can be changed under Settings, then Advanced). Then sign in.
 
-To open Clarinet from a phone or another computer, set `APP_HOST=0.0.0.0` in `.env` and use this computer's address. Testing a device's speed has to happen from that other device: a test on the computer running Clarinet would only measure the computer talking to itself, so it is refused.
+To open Clarinet from a phone or another computer, set `APP_HOST=0.0.0.0` in `.env` and use this computer's address. A phone or other computer tests its link to Clarinet from its own browser. The computer running Clarinet cannot do that (it would only measure itself), so for that one device the button measures its own internet connection with a speed test tool, which takes about a minute.
 
 After about 15 seconds the Devices page lists what the machine can see. A speed test runs at start-up.
 
@@ -104,7 +104,7 @@ On the machine running the app:
 python -m clarinet.cli reset-password USERNAME
 ```
 
-It asks for the new password twice, clears any lockout and signs that account out everywhere. Members use their recovery code on the sign-in page instead ("Forgot your password?").
+It asks for the new password twice and signs that account out everywhere. Members use their recovery code on the sign-in page instead ("Forgot your password?").
 
 ## Configuration
 
@@ -123,7 +123,6 @@ Settings come from `.env` (see `.env.example`) or environment variables. Most ca
 | `BILLING_DAY` | `1` | Day the monthly usage resets |
 | `SLOWDOWN_LATENCY_MULTIPLIER` | `3.0` | Latency this many times normal counts as slow |
 | `SLOWDOWN_SPEED_THRESHOLD` | `0.70` | A router speed test below this share of the plan counts as slow |
-| `ALERT_LOCKOUT_ATTEMPTS`, `ALERT_LOCKOUT_MINUTES` | `5`, `5` | Sign-in lockout |
 | `TRUSTED_PROXIES` | `127.0.0.1,::1` | Reverse proxies whose `X-Forwarded-For` may be believed |
 | `COOKIE_SECURE` | `false` | Send the cookie over HTTPS only (set `true` behind HTTPS) |
 
@@ -143,7 +142,7 @@ To reach it afterwards open `https://clarinet.local` (add the server's address t
 clarinet/
   __init__.py          app, middleware, error pages, template filters
   config.py            settings from .env
-  auth.py              passwords, sessions, lockout
+  auth.py              passwords, sessions
   routers/             one file per area: devices, usage, alerts, speed, slowdowns,
                        security, guest/vouchers, rules, priority, settings, status, account, signup, api, ws
   collector/           things that look at the network: ARP scan, pinger, speed test, traffic counter,
@@ -186,6 +185,7 @@ sudo bash tests/lab/lab_teardown.sh     # remove the lab
 ## Security notes
 
 - Passwords are stored as bcrypt hashes; sessions are signed cookies backed by a server-side record that sign-out and password resets delete.
+- Sign-in does not lock after failed attempts, so use a strong password, especially if the page can be reached by people you do not trust.
 - Cross-site form posts are refused. Sign-out is a POST.
 - Clarinet reads the network it is installed on. Run its router audit and active scan only on networks you own or manage.
 - See the in-app **Privacy** page for what is collected.

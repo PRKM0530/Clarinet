@@ -155,7 +155,7 @@ def test_adm05_admin_cannot_disable_self_and_can_disable_others():
     assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
 
 
-def test_adm05_a_member_resets_their_own_password_with_the_recovery_code_and_it_clears_lockout(trusted_proxy):
+def test_adm05_a_member_resets_their_own_password_with_the_recovery_code(trusted_proxy):
     from clarinet.core_svc import recovery
     from clarinet.database import SessionLocal
     from clarinet.models import Member

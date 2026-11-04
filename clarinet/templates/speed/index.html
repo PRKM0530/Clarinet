@@ -47,9 +47,9 @@
     <div class="stat-value">{{ latest.upload_mbps|round(1) }} <small>Mbps</small></div>
     <div class="stat-meta">Plan: {{ plan_upload|round(0)|int }} Mbps</div>
   </div>
-  <div class="stat-card {% if latest.latency_ms > 80 %}stat-orange{% else %}stat-teal{% endif %}">
+  <div class="stat-card">
     <div class="stat-label">Latency</div>
-    <div class="stat-value">{% if latest.latency_ms < 10000 %}{{ latest.latency_ms|round(0)|int }} <small>ms</small>{% else %}n/a{% endif %}</div>
+    <div class="stat-value">{% if 0 < latest.latency_ms < 60000 %}{{ latest.latency_ms|round(0)|int }} <small>ms</small>{% else %}n/a{% endif %}</div>
     <div class="stat-meta">Server: {{ latest.server_host or '—' }}</div>
   </div>
   <div class="stat-card {% if latest.below_plan %}stat-red{% else %}stat-green{% endif %}">
@@ -91,7 +91,7 @@
           <td style="font-size:12px;color:var(--text-3)">{{ r.tested_at|local('%d %b %H:%M') }}</td>
           <td>{{ r.download_mbps|round(1) }} Mbps</td>
           <td>{{ r.upload_mbps|round(1) }} Mbps</td>
-          <td>{{ r.latency_ms|round(0)|int }} ms</td>
+          <td>{% if 0 < r.latency_ms < 60000 %}{{ r.latency_ms|round(0)|int }} ms{% else %}n/a{% endif %}</td>
           <td style="font-size:12px;color:var(--text-3)">{{ r.server_host or '—' }}</td>
           <td>
             <span class="badge {{ 'badge-red' if r.below_plan else 'badge-green' }}">

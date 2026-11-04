@@ -20,7 +20,7 @@ from clarinet.database import Base
 class LoginAttempt(Base):
     """
     Record of every login attempt (success and failure).
-    Used for lockout enforcement and audit trail.
+    Used for the sign-in history and audit trail.
     """
     __tablename__ = "login_attempt"
 

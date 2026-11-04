@@ -10,6 +10,7 @@ Added (M2):
 """
 from __future__ import annotations
 
+from clarinet.core_svc.speed_filters import known_latency
 from clarinet.core_svc.localtime import configured_zone
 import csv
 import io
@@ -87,10 +88,10 @@ def speed_page(request: Request, db: Session = Depends(get_db)):
         "chart_labels": [local_filter(r.tested_at) for r in reversed(results[:30])],
         "chart_dl": [r.download_mbps for r in reversed(results[:30])],
         "chart_ul": [r.upload_mbps for r in reversed(results[:30])],
-        "chart_lat": [r.latency_ms for r in reversed(results[:30])],
+        "chart_lat": [known_latency(r.latency_ms) for r in reversed(results[:30])],
         "mode": mode,
         "test_running": is_running(),
-        "latest_failed": bool(latest and latest.server_host == "failed"),
+        "latest_failed": bool(latest and (latest.server_host == "failed" or latest.download_mbps <= 0)),
     })
     return templates.TemplateResponse("speed/index.html", context)
 
@@ -133,7 +134,7 @@ def export_speed_csv(request: Request, db: Session = Depends(get_db)):
             local_time,
             r.download_mbps,
             r.upload_mbps,
-            r.latency_ms,
+            known_latency(r.latency_ms) if known_latency(r.latency_ms) is not None else "",
             "Yes" if r.busy else "No",
             "Yes" if r.below_plan else "No",
             r.server_host or "",
@@ -195,7 +196,7 @@ def speed_summary(request: Request, db: Session = Depends(get_db)):
         "last_run_at": latest.tested_at.isoformat().replace("+00:00", "Z"),
         "download_mbps": latest.download_mbps,
         "upload_mbps": latest.upload_mbps,
-        "latency_ms": latest.latency_ms,
+        "latency_ms": known_latency(latest.latency_ms),
         "below_plan": latest.below_plan,
         "plan_download": plan_dl,
         "plan_upload": plan_ul,

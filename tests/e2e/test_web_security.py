@@ -114,42 +114,19 @@ def test_acc05_post_from_the_same_site_still_works(world):
     assert r.status_code == 302 and "info=" in r.headers["location"]
 
 
-# S-13: login lockout
-def _fail(username, xff=None):
-    h = {"X-Forwarded-For": xff} if xff else {}
-    return new_client().post("/login", data={"username": username, "password": "wrong"}, headers=h)
-
-
-def test_adm04_ip_lockout_exists_for_a_single_address(world):
+# Sign-in has no lockout: wrong passwords never keep the right person out
+def test_wrong_passwords_do_not_lock_anyone_out(world):
     for i in range(8):
-        _fail(f"ghost{i}")
-    assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
+        new_client().post("/login", data={"username": ALICE[0], "password": "wrong"})
+        new_client().post("/login", data={"username": f"ghost{i}", "password": "wrong"})
+    assert new_client().post("/login", data={"username": ALICE[0], "password": ALICE[1]}).status_code == 302
+    assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 302
 
 
-def test_s13_rotating_forwarded_for_cannot_bypass_ip_lockout(world):
-    for i in range(8):
-        _fail(f"ghost{i}", xff=f"1.1.1.{i}")
-    # all 8 came from the same real client, so it should now be locked out
-    assert new_client().post("/login", data={"username": BOB[0], "password": BOB[1]}).status_code == 401
-
-
-def test_s13_locked_account_message_does_not_reveal_username(world):
-    for _ in range(5):
-        _fail(ALICE[0])
-    # probe from a second address so the first address's own IP lockout does not mask the difference
-    other = {"X-Forwarded-For": "8.8.4.4"}
-    locked = new_client().post("/login", data={"username": ALICE[0], "password": "x"}, headers=other).text
-    unknown = new_client().post("/login", data={"username": "nosuchuser", "password": "x"}, headers=other).text
-    assert ("temporarily locked" in locked) == ("temporarily locked" in unknown)
-
-
-def test_s13_lockout_settings_are_honoured(world, monkeypatch):
-    from clarinet.config import settings
-    monkeypatch.setattr(settings, "ALERT_LOCKOUT_ATTEMPTS", 2)
-    for _ in range(2):
-        _fail(ALICE[0])
-    locked = new_client().post("/login", data={"username": ALICE[0], "password": ALICE[1]})
-    assert locked.status_code == 401
+def test_wrong_password_and_unknown_user_give_the_same_message(world):
+    known = new_client().post("/login", data={"username": ALICE[0], "password": "x"}).text
+    unknown = new_client().post("/login", data={"username": "nosuchuser", "password": "x"}).text
+    assert "Invalid username or password." in known and "Invalid username or password." in unknown
 
 
 def test_s19_online_count_uses_last_seen(world):

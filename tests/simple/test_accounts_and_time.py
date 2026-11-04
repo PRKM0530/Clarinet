@@ -90,13 +90,9 @@ def test_a_member_resets_their_password_with_the_code_and_gets_a_new_code(db):
     assert forgot(fresh, new="another-new-pw-1").status_code == 200       # the new one works
 
 
-def test_resetting_signs_the_member_out_everywhere_and_clears_a_lockout(db, trusted_proxy):
+def test_resetting_signs_the_member_out_everywhere(db, trusted_proxy):
     alice_session = client("alice", "alice-pass-1")
     assert alice_session.get("/dashboard").status_code == 200
-    for _ in range(5):                                                 # the guesser is on another address
-        client().post("/login", data={"username": "alice", "password": "wrong-wrong"}, headers={"X-Forwarded-For": "4.4.4.4"})
-    db.expire_all()
-    assert member(db, "alice").locked_until is not None
     code = recovery.issue(db, member(db, "alice"))
     assert forgot(code).status_code == 200
     assert alice_session.get("/dashboard").status_code == 302
@@ -260,14 +256,6 @@ def test_the_create_account_link_survives_a_failed_sign_in(db, attempt):
 @pytest.mark.parametrize("typed", ["Praveen", "praveen", "PRAVEEN", " praveen "])
 def test_sign_in_ignores_capital_letters_like_sign_up_does(db, typed):
     assert client().post("/login", data={"username": typed, "password": "12345678"}).status_code == 302
-
-
-def test_changing_the_capitals_does_not_dodge_the_lockout(db):
-    for typed in ("alice", "ALICE", "Alice", "aLiCe", "alice"):
-        client().post("/login", data={"username": typed, "password": "wrong-wrong"})
-    db.expire_all()
-    assert member(db, "alice").locked_until is not None
-    assert client().post("/login", data={"username": "ALICE", "password": "alice-pass-1"}).status_code == 401
 
 
 # the time zone is found automatically

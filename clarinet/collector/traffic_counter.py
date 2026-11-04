@@ -88,23 +88,27 @@ class PacketSniffSource(TrafficSource):
 
 class HostTrafficSource(TrafficSource):
     """
-    Windows: the bytes this computer itself has received and sent, from `netstat -e`.
+    Windows: the bytes this computer itself has received and sent on the adapter it is using now.
     A laptop cannot see other devices' traffic, so only this computer's own use is counted.
     """
 
+    def __init__(self) -> None:
+        self._nic: str | None = None
+
     def read(self) -> dict[str, tuple[int, int]]:
-        import re
-        import subprocess
-        from clarinet.collector.arp_scanner import host_identity
-        me = host_identity()
-        if me is None:
+        import psutil
+        from clarinet.collector.arp_scanner import _local_ip, host_identity
+        me, ip = host_identity(), _local_ip()
+        if me is None or ip is None:
             return {}
-        try:
-            out = subprocess.run(["netstat", "-e"], capture_output=True, text=True, timeout=10, errors="replace").stdout
-        except (OSError, subprocess.SubprocessError):
+        nic = next((name for name, addresses in psutil.net_if_addrs().items() if any(a.address == ip for a in addresses)), None)
+        counters = psutil.net_io_counters(pernic=True).get(nic)
+        if counters is None:
             return {}
-        m = re.search(r"^\s*Bytes\s+(\d+)\s+(\d+)", out, re.MULTILINE)
-        return {me["mac"]: (int(m.group(1)), int(m.group(2)))} if m else {}
+        if nic != self._nic:                     # another adapter has its own totals: start again from here
+            self._nic = nic
+            _prev_counters.clear()
+        return {me["mac"]: (counters.bytes_recv, counters.bytes_sent)}
 
 
 # ─── Module-level source (injectable) ────────────────────────────────────────
@@ -147,6 +151,11 @@ def poll_and_record() -> dict[str, tuple[int, int]]:
     global _prev_counters
 
     current = _source.read()
+    if not _prev_counters:
+        # The first reading after a start is only a starting point. The counters hold everything since the
+        # computer booted (or the firewall rules were made), and that was not used just now.
+        _prev_counters = current
+        return {}
     deltas = _compute_deltas(current, _prev_counters)
     _prev_counters = current
 

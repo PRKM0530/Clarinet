@@ -47,12 +47,17 @@ def _host_worker(device_id: int, member_id: int) -> None:
     try:
         raw = _run_speedtest_cli()
         if raw is None:
-            error = ("No speed test tool answered. Install one with: pip install speedtest-cli, "
-                     "and check that this computer is online.")
+            error = ("The speed test tool did not give a result. Check that this computer is online and try again. "
+                     "If it keeps happening, make sure a tool is installed: pip install speedtest-cli.")
         else:
+            from clarinet.core_svc.speed_filters import real_latency
             with SessionLocal() as db:
-                device_speed.record(db, db.get(Device, device_id), member_id,
-                                    raw["download_mbps"], raw["upload_mbps"], raw["latency_ms"])
+                latency = real_latency(db, raw["latency_ms"])
+                if latency is None:
+                    error = "The speed was measured but the delay could not be, so the result was not saved. Try again in a few minutes."
+                else:
+                    device_speed.record(db, db.get(Device, device_id), member_id,
+                                        raw["download_mbps"], raw["upload_mbps"], latency)
     except device_speed.Refused as refused:
         error = str(refused)
     except Exception:

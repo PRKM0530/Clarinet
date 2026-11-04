@@ -206,7 +206,8 @@ def host_identity() -> dict | None:
         mac = parse_adapter_mac(out, me)
         if mac:
             identity = {"ip": me, "mac": mac, "hostname": socket.gethostname()}
-    _host_cache["me"] = identity
+    if identity:
+        _host_cache["me"] = identity
     return identity
 
 

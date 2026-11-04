@@ -66,8 +66,6 @@ def change_password(
         return back("password_same")
 
     user.password_hash = hash_password(new_password)
-    user.failed_attempts = 0
-    user.locked_until = None
     audit(db, user.member_id, "CHANGE_PASSWORD", "Member", user.member_id)
     end_other_sessions(db, user.member_id, request.session.get("sid"))     # other devices must sign in again
     return back("password_changed", "info")

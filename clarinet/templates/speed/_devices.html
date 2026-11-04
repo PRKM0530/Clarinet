@@ -1,7 +1,7 @@
 <div class="note">
   <strong>Device speed</strong> is measured from each device itself to Clarinet, so it shows how that device's own Wi-Fi or cable link is doing.
   Each device is compared only with its own earlier tests, never with other devices.
-  It tests itself about every {{ test_interval }} minutes while Clarinet is open on it, and you can test it any time. A slowdown is flagged when two tests in a row are at least 25% below its usual speed, which with this schedule takes about an hour or two.
+  {% if on_host %}The computer that runs Clarinet is tested when you press the button; other devices{% else %}It{% endif %} {{ 'test themselves' if on_host else 'tests itself' }} about every {{ test_interval }} minutes while Clarinet is open on {{ 'them' if on_host else 'it' }}. A slowdown is flagged when two tests in a row are at least 25% below its usual speed, which with this schedule takes about an hour or two.
   Everyone tests and sees only their own devices, because each person's Wi-Fi and distance to the router are different.
 </div>
 

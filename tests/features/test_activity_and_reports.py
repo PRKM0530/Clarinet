@@ -164,7 +164,9 @@ def test_old_hours_are_left_alone(db):
     assert activity.classify_recent(db, hours=48) == 0
 
 
-def test_the_usage_page_breakdown_only_covers_what_the_viewer_may_see(db):
+def test_the_usage_page_breakdown_only_covers_what_the_viewer_may_see(db, monkeypatch):
+    from clarinet.core_svc import capabilities
+    monkeypatch.setattr(capabilities, "unavailable", lambda: {})      # the breakdown itself needs Linux
     alice, boss, mine, theirs = make_world(db)
     when = datetime.now(timezone.utc) - timedelta(hours=2)
     _usage_and_lookups(db, mine, when, 1000, 0, {"STREAMING": 1})
@@ -201,3 +203,13 @@ def _traffic(db, device, day, b_in, b_out, hour=12):
     db.commit()
 
 
+def test_the_breakdown_is_not_shown_where_website_lookups_cannot_be_seen(db, monkeypatch):
+    from clarinet.core_svc import capabilities
+    alice, boss, mine, theirs = make_world(db)
+    when = datetime.now(timezone.utc) - timedelta(hours=2)
+    _usage_and_lookups(db, mine, when, 1000, 0, {})
+    activity.classify_recent(db)
+    feature = capabilities.Feature("lookups", "Sorting usage by activity", "x", "This computer does not run Linux")
+    monkeypatch.setattr(capabilities, "unavailable", lambda: {"lookups": feature})
+    page = login("alice", "pw-alice-1").get("/usage?period=week").text
+    assert "Not available here" in page and "Other" not in page.split("What the data was used for")[1].split("Per-device")[0]

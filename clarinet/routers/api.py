@@ -14,6 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from clarinet.auth import require_login, require_admin
+from clarinet.core_svc.speed_filters import known_latency
 from clarinet.database import get_db
 from clarinet.models import (
     Alert, Device, SlowdownEvent, SpeedTestResult,
@@ -86,7 +87,7 @@ def api_status(request: Request, db: Session = Depends(get_db)):
         "latest_speed": {
             "download_mbps": round(latest_speed.download_mbps, 1),
             "upload_mbps": round(latest_speed.upload_mbps, 1),
-            "latency_ms": round(latest_speed.latency_ms, 0),
+            "latency_ms": round(known_latency(latest_speed.latency_ms), 0) if known_latency(latest_speed.latency_ms) else None,
             "tested_at": latest_speed.tested_at.isoformat(),
         } if latest_speed else None,
     }
@@ -251,7 +252,7 @@ def api_speed(
             "result_id": r.result_id,
             "download_mbps": round(r.download_mbps, 2),
             "upload_mbps": round(r.upload_mbps, 2),
-            "latency_ms": round(r.latency_ms, 1),
+            "latency_ms": round(known_latency(r.latency_ms), 1) if known_latency(r.latency_ms) else None,
             "server_host": r.server_host,
             "below_plan": r.below_plan,
             "tested_at": r.tested_at.isoformat(),

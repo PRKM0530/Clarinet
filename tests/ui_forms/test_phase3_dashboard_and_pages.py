@@ -162,16 +162,6 @@ def test_alerts_are_paged_with_links():
     assert "Page 2 of 3" in admin.get("/alerts?status=ALL&type=TEST&page=2").text
 
 
-def test_a_lockout_raises_an_alert_for_administrators_only():
-    seed_world("FULL")
-    admin_client, bob_client = new_client(ADMIN), new_client(BOB)        # signed in before the address gets locked
-    for _ in range(5):
-        new_client().post("/login", data={"username": "alice", "password": "wrong"})
-    admin = admin_client.get("/alerts?type=LOCKOUT").text
-    assert "alice was locked out" in admin
-    assert "alice was locked out" not in bob_client.get("/alerts?status=ALL").text
-
-
 # ---- priority
 def test_a_member_can_cancel_their_own_priority_request_from_the_page():
     world = seed_world("FULL")

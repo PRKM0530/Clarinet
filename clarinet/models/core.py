@@ -48,7 +48,7 @@ class Member(Base):
     # role: ADMIN has full access; MEMBER sees own devices + usage + priority
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="MEMBER")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    # Login lockout (ACC-02: 5 failed attempts → locked 5 min)
+    # Not used any more (sign-in has no lockout); kept so existing databases stay valid
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Soft-disable a member without deleting them
@@ -68,11 +68,6 @@ class Member(Base):
     def is_admin(self) -> bool:
         return self.role == "ADMIN"
 
-    @property
-    def is_locked(self) -> bool:
-        if self.locked_until is None:
-            return False
-        return _now() < self.locked_until
 
 
 # Device

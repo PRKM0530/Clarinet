@@ -4,8 +4,6 @@ Session helpers for HttpOnly signed-cookie sessions.
 
 Policy:
   - A sign-in lasts until the person signs out (or an admin ends it); there is no idle timeout
-  - Login lockout: 5 failures → locked 5 min (ACC-02)
-  - Per-IP lockout: 5 failures from same IP in 5 min → lock (ACC-02b)
   - Every login attempt is written to LoginAttempt table
   - bcrypt for password hashing (NFR-14)
   - Generic error messages prevent username enumeration (ACC-03)
@@ -14,7 +12,7 @@ Policy:
 M1 OWNS THIS FILE — do not edit in other branches.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
@@ -38,15 +36,6 @@ _BCRYPT_ROUNDS = 12
 # bcrypt calls run one at a time (a login takes ~0.25 s, so this is cheap), a new hash is checked before it is
 # returned, and a failed check is repeated once before the password is rejected.
 _bcrypt_lock = threading.Lock()
-
-# Lockout limits come from the ALERT_LOCKOUT_* settings (read at the moment of use)
-def _max_attempts() -> int:
-    return max(1, int(settings.ALERT_LOCKOUT_ATTEMPTS))
-
-
-def _lockout_minutes() -> int:
-    return max(1, int(settings.ALERT_LOCKOUT_MINUTES))
-
 
 def _password_bytes(plain: str) -> bytes:
     return plain.encode("utf-8")[:72]            # bcrypt only uses the first 72 bytes
@@ -165,7 +154,7 @@ def client_ip(request: Request) -> str:
     """
     The address the request really came from. X-Forwarded-For is only believed when the connection itself
     comes from a trusted proxy (settings.TRUSTED_PROXIES); otherwise anyone could pick their own address
-    and dodge the per-address lockout. The right-most address that is not a trusted proxy is used.
+    and appear in the sign-in history under a false address. The right-most address that is not a trusted proxy is used.
     """
     peer = request.client.host if request.client else "unknown"
     trusted = {p.strip() for p in settings.TRUSTED_PROXIES.split(",") if p.strip()}
@@ -178,25 +167,6 @@ def client_ip(request: Request) -> str:
 
 
 _get_client_ip = client_ip
-
-
-def _count_recent_ip_failures(db: Session, ip: str, window_s: int | None = None) -> int:
-    """Count failed login attempts from `ip` in the last `window_s` seconds."""
-    try:
-        from clarinet.models.reports import LoginAttempt
-        window_s = window_s if window_s is not None else _lockout_minutes() * 60
-        cutoff = datetime.utcnow() - timedelta(seconds=window_s)
-        return (
-            db.query(LoginAttempt)
-            .filter(
-                LoginAttempt.ip_address == ip,
-                LoginAttempt.success == False,
-                LoginAttempt.attempted_at >= cutoff,
-            )
-            .count()
-        )
-    except Exception:
-        return 0
 
 
 def _write_login_attempt(
@@ -230,23 +200,11 @@ def attempt_login(
     Try to authenticate a user.
 
     Returns (user, None) on success, or (None, error_message) on failure.
-    Enforces per-user AND per-IP lockout after 5 failures.
-    All error messages are generic to prevent username enumeration.
+    Every attempt is recorded. All error messages are generic, so the page never reveals which usernames exist.
     """
     ip = _get_client_ip(request)
-    # One message for every failure (wrong password, unknown user, disabled or locked account), so the
-    # login page never tells an attacker which usernames exist.
     generic_error = "Invalid username or password."
-    locked_error_template = generic_error
 
-    # ── Per-IP lockout check (even before DB lookup) ──────────────────────────
-    if _count_recent_ip_failures(db, ip) >= _max_attempts():
-        _write_login_attempt(db, ip, username, False)
-        _audit(db, None, "LOGIN_BLOCKED", detail={"username": username, "reason": "ip_lockout", "ip": ip})
-        db.commit()
-        return None, generic_error  # don't reveal IP lockout to attacker
-
-    # ── Look up user ──────────────────────────────────────────────────────────
     # Same rule as sign-up, which treats Praveen and praveen as one name
     user = db.query(Member).filter(func.lower(Member.username) == (username or '').strip().lower()).first()
 
@@ -260,55 +218,15 @@ def attempt_login(
         _write_login_attempt(db, ip, username, False, user.member_id)
         _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "account_inactive"})
         db.commit()
-        # Generic: don't reveal "account disabled" to attackers
         return None, generic_error
 
-    # ── Per-user lockout check ────────────────────────────────────────────────
-    now_utc = datetime.now(timezone.utc)
-    if user.locked_until is not None:
-        locked_until = user.locked_until
-        # Make timezone-aware for comparison
-        if locked_until.tzinfo is None:
-            locked_until = locked_until.replace(tzinfo=timezone.utc)
-        if now_utc < locked_until:
-            remaining_s = (locked_until - now_utc).total_seconds()
-            remaining_min = max(1, int(remaining_s // 60) + 1)
-            _write_login_attempt(db, ip, username, False, user.member_id)
-            _audit(db, user.member_id, "LOGIN_BLOCKED", detail={"reason": "user_lockout"})
-            db.commit()
-            return None, locked_error_template.format(mins=remaining_min)
-        else:
-            # Lockout expired — clear it
-            user.locked_until = None
-            user.failed_attempts = 0
-
-    # ── Password check ────────────────────────────────────────────────────────
     if not verify_password(password, user.password_hash):
-        user.failed_attempts = (user.failed_attempts or 0) + 1
-        if user.failed_attempts >= _max_attempts():
-            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=_lockout_minutes())
-            user.failed_attempts = 0
-            _write_login_attempt(db, ip, username, False, user.member_id)
-            _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password_lockout"})
-            db.commit()
-            try:
-                from clarinet.core_svc.alerts import raise_alert
-                raise_alert(db, "WARNING", "LOCKOUT", f"{username} was locked out",
-                            f"Several wrong passwords for '{username}' from {ip}. The account is locked for "
-                            f"{_lockout_minutes()} minutes. If this was not them, someone may be guessing.",
-                            dedupe_key=username, cooldown_s=_lockout_minutes() * 60)
-            except Exception:
-                pass
-            return None, generic_error
-        else:
-            _write_login_attempt(db, ip, username, False, user.member_id)
-            _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password", "attempts": user.failed_attempts})
-            db.commit()
-            return None, generic_error
+        _write_login_attempt(db, ip, username, False, user.member_id)
+        _audit(db, user.member_id, "LOGIN_FAIL", detail={"reason": "wrong_password"})
+        db.commit()
+        return None, generic_error
 
     # ── Success ───────────────────────────────────────────────────────────────
-    user.failed_attempts = 0
-    user.locked_until = None
     _write_login_attempt(db, ip, username, True, user.member_id)
     _audit(db, user.member_id, "LOGIN_OK", detail={"ip": ip})
     db.commit()

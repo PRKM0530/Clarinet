@@ -3,7 +3,6 @@ clarinet/core_svc/settings_m1.py
 Typed getter helpers for all M1-owned setting keys.
 
 Setting keys owned by M1:
-  auth.*          — lockout/session thresholds
   scan.*          — ARP scanner config
   alerts.*        — alert thresholds and cooldowns
   summary.*       — summary job config
@@ -51,14 +50,6 @@ def _get_bool(db: Session, key: str, default: bool = False) -> bool:
 
 
 # ─── Auth settings ─────────────────────────────────────────────────────────────
-
-def auth_max_attempts(db: Session) -> int:
-    return _get_int(db, "auth.max_attempts", 5)
-
-
-def auth_lockout_minutes(db: Session) -> int:
-    return _get_int(db, "auth.lockout_minutes", 5)
-
 
 def auth_ip_window_seconds(db: Session) -> int:
     return _get_int(db, "auth.ip_window_seconds", 300)

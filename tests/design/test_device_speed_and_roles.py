@@ -11,7 +11,7 @@ import pytest
 from clarinet.core_svc import device_speed
 from clarinet.core_svc.device_names import device_mono, device_name
 from clarinet.database import SessionLocal
-from clarinet.models import Device
+from clarinet.models import Device, UsageRecord
 from clarinet.models.devspeed import DeviceSpeedResult
 from tests._support import ADMIN, ALICE, new_client, seed_world
 
@@ -220,3 +220,55 @@ def test_host_test_is_only_for_the_host_and_the_owner(monkeypatch):
     monkeypatch.setattr(devicespeed, "detect_device", lambda db, ip: db.get(Device, ids["d_bob"]))
     assert alice.post("/speed/device/host-test").status_code == 403            # not alice's device
     assert new_client().post("/speed/device/host-test").status_code == 401
+
+
+def test_a_placeholder_delay_is_never_taken_as_a_measurement(monkeypatch):
+    from clarinet.core_svc.speed_filters import known_latency, real_latency
+    from clarinet.models import PingRecord
+    ids = seed_world()
+    assert known_latency(1800000.0) is None and known_latency(0) is None and known_latency(14.0) == 14.0
+    with SessionLocal() as db:
+        assert real_latency(db, 22.0) == 22.0
+        assert real_latency(db, 1800000.0) is None                      # no ping either: unknown, not zero
+        db.add(PingRecord(target="cloudflare", host="1.1.1.1", avg_ms=11.5, reachable=True))
+        db.commit()
+        assert real_latency(db, 1800000.0) == 11.5                      # this computer's own real ping
+
+    from clarinet.routers import devicespeed
+    monkeypatch.setattr("clarinet.collector.speed_test._run_speedtest_cli",
+                        lambda: {"download_mbps": 4.6, "upload_mbps": 0.4, "latency_ms": 1800000.0})
+    devicespeed._host_worker(ids["d_alice"], ids["alice"])
+    assert devicespeed._host["error"] is None
+    with SessionLocal() as db:
+        assert db.query(DeviceSpeedResult).one().latency_ms == 11.5
+
+
+def test_a_router_test_with_no_speed_counts_as_failed_and_shows_no_made_up_delay():
+    from clarinet.models import SpeedTestResult
+    seed_world()
+    with SessionLocal() as db:
+        db.add(SpeedTestResult(tested_at=datetime.now(timezone.utc), download_mbps=0.0, upload_mbps=0.0, latency_ms=1800000.0,
+                               busy=False, below_plan=False, server_host="far.example.net"))
+        db.commit()
+    page = new_client(ADMIN).get("/speed?view=internet").text
+    assert "did not finish" in page and "1800000" not in page.split("<canvas")[0]
+
+
+def test_the_first_reading_after_a_start_counts_nothing(monkeypatch):
+    from clarinet.collector import traffic_counter as tc
+    ids = seed_world()
+    with SessionLocal() as db:
+        before = db.query(UsageRecord).count()
+    mac = "AA:00:00:00:00:01"
+    readings = iter([{mac: (5_000_000_000, 2_000_000_000)}, {mac: (5_000_001_000, 2_000_000_500)}])
+
+    class Source(tc.TrafficSource):
+        def read(self):
+            return next(readings)
+
+    monkeypatch.setattr(tc, "_source", Source())
+    monkeypatch.setattr(tc, "_prev_counters", {})
+    assert tc.poll_and_record() == {}                                   # gigabytes since boot are not new usage
+    with SessionLocal() as db:
+        assert db.query(UsageRecord).count() == before
+    assert tc.poll_and_record() == {mac: (1000, 500)}                   # only what moved since the last reading

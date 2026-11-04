@@ -51,7 +51,7 @@
     <span class="card-header-sub">Worked out from the websites looked up, not from what was done on them</span>
   </div>
   <div class="card-body">
-    {% for a in activity_rows %}
+    {% for a in (activity_rows if 'lookups' not in unavailable else []) %}
     <div class="bar-row">
       <span>{{ a.label }}</span>
       <span class="bar-track"><span class="bar-fill" style="width:{{ a.pct }}%"></span></span>

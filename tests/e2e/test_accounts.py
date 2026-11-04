@@ -260,7 +260,7 @@ def test_cli_resets_the_only_admins_password(world):
     assert new_client().post("/login", data={"username": "boss", "password": ADMIN[1]}).status_code == 401
 
 
-def test_cli_clears_a_lockout_and_signs_out_old_sessions(world):
+def test_cli_signs_out_old_sessions(world):
     from clarinet import cli
     old = new_client(ADMIN)
     for _ in range(5):

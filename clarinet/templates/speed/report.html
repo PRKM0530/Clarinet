@@ -42,7 +42,7 @@
         <td class="num">{{ t.download_mbps|round(1) }} Mbps</td>
         <td class="num {{ 'text-bad' if pct is not none and pct < report.threshold_pct else '' }}">{{ pct if pct is not none else '-' }}{{ '%' if pct is not none }}</td>
         <td class="num">{{ t.upload_mbps|round(1) }} Mbps</td>
-        <td class="num">{{ t.latency_ms|round(0)|int }} ms</td>
+        <td class="num">{% if 0 < t.latency_ms < 60000 %}{{ t.latency_ms|round(0)|int }} ms{% else %}n/a{% endif %}</td>
         <td>{{ t.server_host or '-' }}</td>
       </tr>
       {% endfor %}

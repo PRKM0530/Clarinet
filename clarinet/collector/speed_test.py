@@ -186,7 +186,7 @@ def _do_run() -> None:
 
         now = datetime.now(timezone.utc)
 
-        if raw is None:
+        if raw is None or raw["download_mbps"] <= 0:
             # Record failed test
             record = SpeedTestResult(
                 tested_at=now,
@@ -202,6 +202,9 @@ def _do_run() -> None:
             log.warning("Speed test failed: no tool available")
             return
 
+        from clarinet.core_svc.speed_filters import real_latency
+        latency = real_latency(db, raw["latency_ms"])
+
         # Determine below_plan
         below = False
         if plan_dl > 0 and plan_ul > 0:
@@ -215,7 +218,7 @@ def _do_run() -> None:
             tested_at=now,
             download_mbps=round(raw["download_mbps"], 2),
             upload_mbps=round(raw["upload_mbps"], 2),
-            latency_ms=round(raw["latency_ms"], 1),
+            latency_ms=round(latency, 1) if latency is not None else 0.0,      # 0 is shown as "n/a"
             busy=busy,
             below_plan=below,
             server_host=raw.get("server_host"),
@@ -232,7 +235,7 @@ def _do_run() -> None:
                      "Speed test finished",
                      f"Download {record.download_mbps:.1f} Mbps, "
                      f"Upload {record.upload_mbps:.1f} Mbps, "
-                     f"Latency {record.latency_ms:.0f} ms")
+                     + (f"Latency {record.latency_ms:.0f} ms" if latency is not None else "Delay could not be measured"))
 
         # Warning alert: consistently below plan (not single test)
         if below and plan_dl > 0 and _below_plan_consistently(db, plan_dl, plan_ul):

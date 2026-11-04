@@ -653,6 +653,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .metric-grid .metric { padding: 10px 12px; }
 .micro-note { margin: 0; color: var(--text-2); font-size: 13px; }
 .device-card-foot { display: flex; align-items: center; gap: 10px; }
+.device-card-foot .btn { flex: none; white-space: nowrap; }
 .small { font-size: 12px; }
 .card-details summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
 @media (max-width: 600px) { .device-cards { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: 1fr 1fr; } }

@@ -4,7 +4,7 @@ clarinet/cli.py  -  administration from the machine itself.
     python -m clarinet.cli reset-password USERNAME
 
 Use this when the only administrator has forgotten their password. Whoever can run it already controls the
-machine and the database, so it asks for no old password. It also clears a lockout and signs the account
+machine and the database, so it asks for no old password. It also signs the account
 out everywhere.
 """
 import argparse
@@ -32,10 +32,9 @@ def reset_password(username: str, password: str | None) -> int:
             print("The password must be at least 8 characters.", file=sys.stderr)
             return 1
         member.password_hash = hash_password(password)
-        member.failed_attempts, member.locked_until, member.is_active = 0, None, True
+        member.is_active = True
         from clarinet.models.reports import LoginAttempt
         db.query(LoginAttempt).filter(LoginAttempt.username == username, LoginAttempt.success == False).delete()  # noqa: E712
-        # (the per-address lockout counts failed attempts, so clearing the account's own failures lifts it too)
         audit(db, None, "RESET_PASSWORD_CLI", "Member", member.member_id)
         end_sessions(db, member.member_id)
     print(f"Password for {username!r} changed. They can sign in now.")
